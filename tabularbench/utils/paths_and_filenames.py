@@ -1,0 +1,19 @@
+SWEEP_FILE_NAME = 'sweep.csv'                                                              # Every sweep that needs to be run
+RESULTS_FILE_NAME = 'results_sweep.nc'                                                     # Results for one sweep
+RESULTS_MODIFIED_FILE_NAME = 'results_modified_for_plotting.csv'                           # Same as above, but slighly modified
+DEFAULT_RESULTS_VAL_FILE_NAME = 'default_results_val.csv'                                  # Results for default configuration runs 
+DEFAULT_RESULTS_TEST_FILE_NAME = 'default_results_test.csv'                                # Results for default configuration runs 
+RANKING_TABLE_FILE_NAME = 'ranking_table.csv'                                              # Ranking table for Tabzilla benchmark
+PATH_TO_WHYTREES_BENCH_RESULTS = 'data/benchmark_total.csv'                                # Benchmark results from benchmark authors
+PATH_TO_WHYTREES_BENCH_RESULTS_REFORMATTED = 'data/reformatted_results_whytrees.nc'        # Same as above, but reformatted to easier to use
+PATH_TO_TABZILLA_BENCH_RESULTS = 'data/metadataset_clean.csv'                              # Benchmark results from benchmark authors
+PATH_TO_TABZILLA_BENCH_RESULTS_REFORMATTED = 'data/reformatted_results_tabzilla.nc'        # Same as above, but reformatted to easier to use
+PATH_TO_OPENML_DATASETS = 'data/datasets/'                                                 # Where downloaded OpenML datasets are stored
+CONFIG_MAIN_FILE_NAME = 'config_main.yaml'                                                 # Main config file
+CONFIG_BENCHMARK_SWEEP_FILE_NAME = 'config_benchmark_sweep.yaml'                           # Benchmark sweep config file
+CONFIG_PRETRAIN_FILE_NAME = 'config_pretrain.yaml'                                         # Pretraining config file
+CONFIG_RUN_FILE_NAME = 'config_run.yaml'                                                   # Run config file
+PATH_TO_DATA_SPLIT = 'tabularbench/data/whytrees_train_val_test_indices.npy'               # Indices for train/val/test split
+
+DATASETS_TABZILLA_GLOB = 'tabzilla_*.nc'
+DATASETS_WHYTREES_GLOB = 'whytrees_*_MEDIUM.nc'
