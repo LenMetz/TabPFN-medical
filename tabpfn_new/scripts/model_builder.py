@@ -171,6 +171,9 @@ def get_gp_mix_prior_hyperparameters(config):
 def get_gp_prior_hyperparameters(config):
     return {hp: (list(config[hp].values())[0]) if type(config[hp]) is dict else config[hp] for hp in config}
 
+def get_forest_prior_hyperparameters(config):
+    return config
+
 
 def get_meta_gp_prior_hyperparameters(config):
     from tabpfn.priors.utils import trunc_norm_sampler_f
@@ -189,7 +192,7 @@ def get_meta_gp_prior_hyperparameters(config):
 
 
 def get_model(config, device, should_train=True, verbose=False, state_dict=None, epoch_callback=None):
-    import tabpfn.priors as priors
+    import tabpfn_new.priors as priors
     from tabpfn.train import train, Losses
     extra_kwargs = {}
     verbose_train, verbose_prior = verbose >= 1, verbose >= 2
@@ -237,6 +240,9 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
         elif config['prior_type'] == 'gp_mix':
             prior_hyperparameters = get_gp_mix_prior_hyperparameters(config)
             model_proto = priors.fast_gp_mix
+        elif config['prior_type'] == 'forest':
+            prior_hyperparameters = get_forest_prior_hyperparameters(config)
+            model_proto = priors.forest
         else:
             raise Exception()
 

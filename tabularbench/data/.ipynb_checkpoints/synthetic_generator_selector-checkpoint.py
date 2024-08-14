@@ -6,6 +6,7 @@ from tabularbench.data.synthetic_generator_tabpfn import synthetic_dataset_gener
 from prior.synthetic_generator_forest_altdata import synthetic_dataset_generator_forest_altdata, synthetic_dataset_function_forest_altdata
 
 
+
 class SyntheticDatasetGeneratorSelectorMixin():
 
     def select_synthetic_dataset_generator(self):
@@ -49,9 +50,8 @@ class SyntheticDatasetGeneratorSelectorMixin():
                     max_depth=self.generator_hyperparams['max_depth'],
                     categorical_x=self.generator_hyperparams['categorical_x'],
                 )
-            case GeneratorName.FOREST_ALTDATA:
-                return synthetic_dataset_generator_forest_altdata(
-                    get_data=self.generator_hyperparams[''],
+            case GeneratorName.MIX:
+                return synthetic_dataset_generator_mix(
                     n_samples=self.n_samples,
                     min_features=self.min_features,
                     max_features=self.max_features,
