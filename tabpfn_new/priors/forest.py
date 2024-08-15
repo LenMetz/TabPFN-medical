@@ -28,15 +28,22 @@ def causes_sampler_f(num_causes):
 def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default_device, num_outputs=1, sampling='normal'
               , epoch=None, **kwargs):
     
+    
+    n_classes = get_n_classes(hyperparameters["max_classes"])
+    categorical_perc = get_categorical_perc(hyperparameters["categorical_x"])
+    depth = get_depth(hyperparameters["min_depth"], hyperparameters["max_depth"])
+    n_features = get_n_features(hyperparameters["min_features"], hyperparameters["max_features"])
+    n_categorical_features = get_n_categorical_features(categorical_perc, n_features)
+    n_categorical_classes = get_n_categorical_classes(n_categorical_features)
+    if "data_sample_func" in hyperparameters:
+        data_sample_func = hyperparameters["data_sample_func"]
+    else: 
+        data_sample_func = np.random.normal
+        
     def get_sample():
-        n_classes = get_n_classes(hyperparameters["max_classes"])
-        categorical_perc = get_categorical_perc(hyperparameters["categorical_x"])
-        depth = get_depth(hyperparameters["min_depth"], hyperparameters["max_depth"])
-        n_features = get_n_features(hyperparameters["min_features"], hyperparameters["max_features"])
-        n_categorical_features = get_n_categorical_features(categorical_perc, n_features)
-        n_categorical_classes = get_n_categorical_classes(n_categorical_features)
-        x = np.random.normal(size=(hyperparameters["base_size"], n_features))
-        y = np.random.normal(0, 1, size=(hyperparameters["base_size"],))
+        
+        x = data_sample_func(size=(hyperparameters["base_size"], n_features))
+        y = data_sample_func(0, 1, size=(hyperparameters["base_size"],))
 
         clf = DecisionTreeRegressor(
             max_depth=depth,
@@ -50,15 +57,16 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
         z = clf.predict(x2)
         #z = quantile_transform(z)
         z = put_in_buckets(z, n_classes)
-        return x2, z
+        return np.expand_dims(x2,1), np.expand_dims(z,1)
     
 
     sample = [get_sample() for _ in range(0, batch_size)]
-
     x, y = zip(*sample)
-    x = torch.tensor(x)
-    y = torch.tensor(y)
+    x, y = np.concatenate(x,1), np.concatenate(y,1)
+    x = torch.tensor(x).float()
+    y = torch.tensor(y).float()
     
+    print(x.shape, y.shape)
     return x, y, y
     
 def get_n_classes(max_classes: int) -> int:
