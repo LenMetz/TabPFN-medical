@@ -193,7 +193,7 @@ def get_meta_gp_prior_hyperparameters(config):
 
 def get_model(config, device, should_train=True, verbose=False, state_dict=None, epoch_callback=None):
     import tabpfn_new.priors as priors
-    from tabpfn.train import train, Losses
+    from tabpfn_new.train import train, Losses
     extra_kwargs = {}
     verbose_train, verbose_prior = verbose >= 1, verbose >= 2
     config['verbose'] = verbose_prior
