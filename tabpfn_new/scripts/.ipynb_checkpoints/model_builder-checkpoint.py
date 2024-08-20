@@ -192,8 +192,14 @@ def get_meta_gp_prior_hyperparameters(config):
 
 
 def get_model(config, device, should_train=True, verbose=False, state_dict=None, epoch_callback=None):
-    import tabpfn_new.priors as priors
-    from tabpfn_new.train import train, Losses
+    
+    import os
+    import sys
+    parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    sys.path.insert(0, parent_dir)
+    
+    import priors as priors
+    from train import train, Losses
     extra_kwargs = {}
     verbose_train, verbose_prior = verbose >= 1, verbose >= 2
     config['verbose'] = verbose_prior
@@ -241,7 +247,7 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
             prior_hyperparameters = get_gp_mix_prior_hyperparameters(config)
             model_proto = priors.fast_gp_mix
         elif config['prior_type'] == 'forest':
-            prior_hyperparameters = get_forest_prior_hyperparameters(config)
+            prior_hyperparameters = get_mlp_prior_hyperparameters(config)
             model_proto = priors.forest
         else:
             raise Exception()
@@ -287,7 +293,6 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
 
     config['bptt_extra_samples'] = config['bptt_extra_samples'] if 'bptt_extra_samples' in config else None
     config['eval_positions'] = [int(config['bptt'] * 0.95)] if config['bptt_extra_samples'] is None else [int(config['bptt'])]
-
     epochs = 0 if not should_train else config['epochs']
     #print('MODEL BUILDER', model_proto, extra_kwargs['get_batch'])
     model = train(model_proto.DataLoader

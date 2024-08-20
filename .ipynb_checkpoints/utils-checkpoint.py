@@ -113,5 +113,6 @@ def get_dataloader(config, device, should_train=True, verbose=False, state_dict=
             , 'hyperparameters': prior_hyperparameters
             #, 'dynamic_batch_size': 1 if ('num_global_att_tokens' in config and config['num_global_att_tokens']) else 2
             , 'batch_size_per_gp_sample': config.get('batch_size_per_gp_sample', None)
+            , **extra_kwargs
     }
     return model_proto.DataLoader, extra_prior_kwargs_dict

@@ -108,7 +108,7 @@ class FlexibleCategorical(torch.nn.Module):
         if self.h['num_classes'] == 0:
             self.class_assigner = RegressionNormalized()
         else:
-            if self.h['num_classes'] > 1 and not self.h['balanced']:
+            if self.h['num_classes'] > 1 and not self.h['balanced']:+-
                 if self.h['multiclass_type'] == 'rank':
                     self.class_assigner = MulticlassRank(self.h['num_classes']
                                                  , ordered_p=self.h['output_multiclass_ordered_p']

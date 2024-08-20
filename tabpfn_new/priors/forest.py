@@ -43,7 +43,7 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
     def get_sample():
         
         x = data_sample_func(size=(hyperparameters["base_size"], n_features))
-        y = data_sample_func(0, 1, size=(hyperparameters["base_size"],))
+        y = np.random.normal(0, 1, size=(hyperparameters["base_size"],))
 
         clf = DecisionTreeRegressor(
             max_depth=depth,
@@ -51,7 +51,7 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
         )
         clf.fit(x, y)
 
-        x2 = np.random.normal(size=(hyperparameters["n_samples"], n_features))
+        x2 = data_sample_func(size=(hyperparameters["n_samples"], n_features))
         x2 = transform_some_features_to_categorical(x2, n_categorical_features, n_categorical_classes)
 
         z = clf.predict(x2)
@@ -66,12 +66,13 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
     x = torch.tensor(x).float()
     y = torch.tensor(y).float()
     
-    print(x.shape, y.shape)
     return x, y, y
     
 def get_n_classes(max_classes: int) -> int:
-    return np.random.randint(2, max_classes, size=1).item()
-
+    if max_classes>2:
+        return np.random.randint(2, max_classes, size=1).item()
+    else: return 2
+        
 def get_categorical_perc(categorical_x: bool) -> float:
     if categorical_x:
         return np.random.uniform(0, 1, size=(1,)).item()
