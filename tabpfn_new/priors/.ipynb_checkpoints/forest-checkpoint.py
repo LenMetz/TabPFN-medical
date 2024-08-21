@@ -56,7 +56,7 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
 
         z = clf.predict(x2)
         #z = quantile_transform(z)
-        z = put_in_buckets(z, n_classes)
+        #z = put_in_buckets(z, n_classes)
         return np.expand_dims(x2,1), np.expand_dims(z,1)
     
 

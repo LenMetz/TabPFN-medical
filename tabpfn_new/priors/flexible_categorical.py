@@ -108,7 +108,7 @@ class FlexibleCategorical(torch.nn.Module):
         if self.h['num_classes'] == 0:
             self.class_assigner = RegressionNormalized()
         else:
-            if self.h['num_classes'] > 1 and not self.h['balanced']:+-
+            if self.h['num_classes'] > 1 and not self.h['balanced']:
                 if self.h['multiclass_type'] == 'rank':
                     self.class_assigner = MulticlassRank(self.h['num_classes']
                                                  , ordered_p=self.h['output_multiclass_ordered_p']
@@ -142,7 +142,9 @@ class FlexibleCategorical(torch.nn.Module):
 
     def forward(self, batch_size):
         start = time.time()
+        #print(self.args_passed["num_features"])
         x, y, y_ = self.get_batch(hyperparameters=self.h, **self.args_passed)
+        #print(torch.sum(torch.where(torch.sum(torch.abs(x), dim=0)>0,0,1)))
         if time_it:
             print('Flex Forward Block 1', round(time.time() - start, 3))
 
@@ -173,7 +175,7 @@ class FlexibleCategorical(torch.nn.Module):
         if time_it:
             print('Flex Forward Block 2', round(time.time() - start, 3))
             start = time.time()
-
+        
         if self.h['normalize_to_ranking']:
             x = to_ranking_low_mem(x)
         else:
@@ -197,9 +199,13 @@ class FlexibleCategorical(torch.nn.Module):
 
         start = time.time()
         # Append empty features if enabled
+        
+        #print(torch.sum(torch.where(torch.sum(torch.abs(x), dim=0)>0,0,1)))
         x = torch.cat(
             [x, torch.zeros((x.shape[0], x.shape[1], self.args['num_features'] - self.h['num_features_used']),
                             device=self.args['device'])], -1)
+        
+        #print(torch.sum(torch.where(torch.sum(torch.abs(x), dim=0)>0,0,1)))
         if time_it:
             print('Flex Forward Block 6', round(time.time() - start, 3))
 
