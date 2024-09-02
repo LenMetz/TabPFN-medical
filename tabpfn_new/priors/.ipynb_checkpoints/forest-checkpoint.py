@@ -25,6 +25,25 @@ def causes_sampler_f(num_causes):
     std = np.abs(np.random.normal(0, 1, (num_causes)) * means)
     return means, std
 
+def get_sample_function(name):
+    if name=="zinb":
+        return zinb
+    else:
+        raise Exception("Sample function "+ name + " not found!")
+
+# zero-inflated negative binomial distribution
+def zinb(size=(1000,100)):
+    pi = 0.25
+    p = np.random.uniform(0.9,0.95, size=size[1])
+    p = np.repeat(np.expand_dims(p,axis=0),size[0],axis=0)
+    X = np.random.negative_binomial(1000,p)
+    X = np.random.binomial(1,1-pi,size)*X
+    return X
+
+# makes dataset compositional
+def to_comp(X):
+    return np.expand_dims(1/np.sum(X,axis=1),axis=1)*X
+
 def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default_device, num_outputs=1, sampling='normal'
               , epoch=None, **kwargs):
     
@@ -36,13 +55,15 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
     n_categorical_features = get_n_categorical_features(categorical_perc, n_features)
     n_categorical_classes = get_n_categorical_classes(n_categorical_features)
     if "data_sample_func" in hyperparameters:
-        data_sample_func = hyperparameters["data_sample_func"]
+        data_sample_func = get_sample_function(hyperparameters["data_sample_func"])
     else: 
         data_sample_func = np.random.normal
         
     def get_sample():
         
         x = data_sample_func(size=(hyperparameters["base_size"], n_features))
+        if hyperparameters["comp"]:
+            x = to_comp(x)
         y = np.random.normal(0, 1, size=(hyperparameters["base_size"],))
 
         clf = DecisionTreeRegressor(
@@ -52,7 +73,9 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
         clf.fit(x, y)
 
         x2 = data_sample_func(size=(hyperparameters["n_samples"], n_features))
-        x2 = transform_some_features_to_categorical(x2, n_categorical_features, n_categorical_classes)
+        if hyperparameters["comp"]:
+            x2 = to_comp(x2)
+        #x2 = transform_some_features_to_categorical(x2, n_categorical_features, n_categorical_classes)
 
         z = clf.predict(x2)
         #z = quantile_transform(z)

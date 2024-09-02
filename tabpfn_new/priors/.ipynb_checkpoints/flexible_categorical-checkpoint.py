@@ -180,8 +180,8 @@ class FlexibleCategorical(torch.nn.Module):
             x = to_ranking_low_mem(x)
         else:
             x = remove_outliers(x)
-        x, y = normalize_data(x), normalize_data(y)
-
+        if 'normalize' in self.h and self.h["normalize"]==True:
+            x, y = normalize_data(x), normalize_data(y)
         if time_it:
             print('Flex Forward Block 3', round(time.time() - start, 3))
             start = time.time()

@@ -200,6 +200,8 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
     
     import priors as priors
     from train import train, Losses
+    sys.path.pop()
+    
     extra_kwargs = {}
     verbose_train, verbose_prior = verbose >= 1, verbose >= 2
     config['verbose'] = verbose_prior
