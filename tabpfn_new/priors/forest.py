@@ -28,21 +28,32 @@ def causes_sampler_f(num_causes):
 def get_sample_function(name):
     if name=="zinb":
         return zinb
+    if name=="mnd":
+        return multinomial_dirichlet
     else:
         raise Exception("Sample function "+ name + " not found!")
 
 # zero-inflated negative binomial distribution
 def zinb(size=(1000,100)):
     pi = 0.25
-    p = np.random.uniform(0.9,0.95, size=size[1])
+    p = np.random.uniform(0.95,0.99, size=size[1])
     p = np.repeat(np.expand_dims(p,axis=0),size[0],axis=0)
-    X = np.random.negative_binomial(1000,p)
+    X = np.random.negative_binomial(100,p)
     X = np.random.binomial(1,1-pi,size)*X
     return X
 
 # makes dataset compositional
 def to_comp(X):
     return np.expand_dims(1/np.sum(X,axis=1),axis=1)*X
+
+# multinomial dirichlet distribution
+def multinomial_dirichlet(size=(1000,100)):
+    M = 1000
+    alphas = np.random.beta(1,5,size[1])
+    thetas = [np.random.dirichlet(alphas) for i in range(size[0])]
+    #print(thetas, np.sum(thetas))
+    X = np.asarray([np.random.multinomial(M, theta)/M for theta in thetas])
+    return X
 
 def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default_device, num_outputs=1, sampling='normal'
               , epoch=None, **kwargs):
