@@ -25,41 +25,47 @@ def causes_sampler_f(num_causes):
     std = np.abs(np.random.normal(0, 1, (num_causes)) * means)
     return means, std
 
-def get_sample_function(name):
-    if name=="zinb":
-        return zinb
-    if name=="mnd":
-        return multinomial_dirichlet
-    else:
-        raise Exception("Sample function "+ name + " not found!")
 
-# zero-inflated negative binomial distribution
-def zinb(size=(1000,100)):
-    pi = 0.25
-    p = np.random.uniform(0.95,0.99, size=size[1])
-    p = np.repeat(np.expand_dims(p,axis=0),size[0],axis=0)
-    X = np.random.negative_binomial(100,p)
-    X = np.random.binomial(1,1-pi,size)*X
-    return X
 
-# makes dataset compositional
-def to_comp(X):
-    return np.expand_dims(1/np.sum(X,axis=1),axis=1)*X
 
-# multinomial dirichlet distribution
-def multinomial_dirichlet(size=(1000,100)):
-    M = 1000
-    alphas = np.random.beta(1,5,size[1])
-    thetas = [np.random.dirichlet(alphas) for i in range(size[0])]
-    #print(thetas, np.sum(thetas))
-    X = np.asarray([np.random.multinomial(M, theta)/M for theta in thetas])
-    return X
 
 def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default_device, num_outputs=1, sampling='normal'
               , epoch=None, **kwargs):
+
+    # zero-inflated negative binomial distribution
+    def zinb(size=(1000,100)):
+        pi = 0.25
+        p = np.random.uniform(0.95,0.99, size=size[1])
+        p = np.repeat(np.expand_dims(p,axis=0),size[0],axis=0)
+        X = np.random.negative_binomial(100,p)
+        X = np.random.binomial(1,1-pi,size)*X
+        return X
     
+    # makes dataset compositional
+    def to_comp(X):
+        return np.expand_dims(1/np.sum(X,axis=1),axis=1)*X
     
-    n_classes = get_n_classes(hyperparameters["max_classes"])
+    # multinomial dirichlet distribution
+    def multinomial_dirichlet(size=(1000,100)):
+        M = hyperparameters["mnd_M"] if "mnd_M" in hyperparameters else 1000
+        a1 = hyperparameters["mnd_a1"] if "mnd_a1" in hyperparameters else 1
+        a2 = hyperparameters["mnd_a2"] if "mnd_a2" in hyperparameters else 5
+        a1 = np.random.uniform(1, 5, size[1])
+        a2 = np.random.uniform(1, 10, size[1])
+        alphas = np.random.beta(a1,a2)#,size[1])
+        thetas = [np.random.dirichlet(alphas) for i in range(size[0])]
+        #print(thetas, np.sum(thetas))
+        X = np.asarray([np.random.multinomial(M, theta)/M for theta in thetas])
+        return X
+    def get_sample_function(name):
+        if name=="zinb":
+            return zinb
+        if name=="mnd":
+            return multinomial_dirichlet
+        else:
+            raise Exception("Sample function "+ name + " not found!")
+    
+    n_classes = get_n_classes(hyperparameters["max_num_classes"])
     categorical_perc = get_categorical_perc(hyperparameters["categorical_x"])
     depth = get_depth(hyperparameters["min_depth"], hyperparameters["max_depth"])
     n_features = get_n_features(hyperparameters["min_features"], hyperparameters["max_features"])
@@ -76,13 +82,11 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
         if hyperparameters["comp"]:
             x = to_comp(x)
         y = np.random.normal(0, 1, size=(hyperparameters["base_size"],))
-
         clf = DecisionTreeRegressor(
             max_depth=depth,
             max_features='sqrt',
         )
         clf.fit(x, y)
-
         x2 = data_sample_func(size=(hyperparameters["n_samples"], n_features))
         if hyperparameters["comp"]:
             x2 = to_comp(x2)

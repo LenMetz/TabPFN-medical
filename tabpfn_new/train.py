@@ -61,7 +61,6 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
         n_out = criterion.weight.shape[0]
     else:
         n_out = 1
-
     model = TransformerModel(encoder, n_out, emsize, nhead, nhid, nlayers, dropout, style_encoder=style_encoder,
                              y_encoder=y_encoder_generator(1, emsize), input_normalization=input_normalization,
                              pos_encoder=(pos_encoder_generator or positional_encodings.NoPositionalEncoding)(emsize, bptt*2),
@@ -110,7 +109,6 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
         before_get_batch = time.time()
         assert len(dl) % aggregate_k_gradients == 0, 'Please set the number of steps per epoch s.t. `aggregate_k_gradients` divides it.'
         for batch, (data, targets, single_eval_pos) in enumerate(dl):
-            print(targets)
             if using_dist and not (batch % aggregate_k_gradients == aggregate_k_gradients - 1):
                 cm = model.no_sync()
             else:
@@ -129,7 +127,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                                    , single_eval_pos=single_eval_pos)
 
                     forward_time = time.time() - before_forward
-
+                    
                     if single_eval_pos is not None:
                         targets = targets[single_eval_pos:]
                     if isinstance(criterion, nn.GaussianNLLLoss):
@@ -145,6 +143,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                         losses = criterion(output.reshape(-1, n_out), targets.to(device).long().flatten())
                     else:
                         losses = criterion(output, targets)
+                    #print(output.shape, targets.shape)
                     losses = losses.view(*output.shape[0:2])
                     loss, nan_share = utils.torch_nanmean(losses.mean(0), return_nanshare=True)
                     loss = loss / aggregate_k_gradients
@@ -202,7 +201,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 print('-' * 89)
                 print(
                     f'| end of epoch {epoch:3d} | time: {(time.time() - epoch_start_time):5.2f}s | mean loss {total_loss:5.2f} | '
-                    f"pos losses {','.join([f'{l:5.2f}' for l in total_positional_losses])}, lr {scheduler.get_last_lr()[0]}"
+                    #f"pos losses {','.join([f'{l:5.2f}' for l in total_positional_losses])}, lr {scheduler.get_last_lr()[0]}"
                     f' data time {time_to_get_batch:5.2f} step time {step_time:5.2f}'
                     f' forward time {forward_time:5.2f}' 
                     f' nan share {nan_share:5.2f} ignore share (for classification tasks) {ignore_share:5.4f}'
