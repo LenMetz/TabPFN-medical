@@ -143,7 +143,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                         losses = criterion(output.reshape(-1, n_out), targets.to(device).long().flatten())
                     else:
                         losses = criterion(output, targets)
-                    #print(output.shape, targets.shape)
+                    #print(output[:3], targets[:3])
                     losses = losses.view(*output.shape[0:2])
                     loss, nan_share = utils.torch_nanmean(losses.mean(0), return_nanshare=True)
                     loss = loss / aggregate_k_gradients

@@ -213,6 +213,7 @@ class FlexibleCategorical(torch.nn.Module):
             print('Nans in target!')
 
         if self.h['check_is_compatible']:
+            '''
             for b in range(y.shape[1]):
                 is_compatible, N = False, 0
                 while not is_compatible and N < 10:
@@ -229,7 +230,7 @@ class FlexibleCategorical(torch.nn.Module):
                 if not is_compatible:
                     if not is_compatible:
                         # todo check that it really does this and how many together
-                        y[:, b] = -100 # Relies on CE having `ignore_index` set to -100 (default)
+                        y[:, b] = -100 # Relies on CE having `ignore_index` set to -100 (default)'''
 
         if self.h['normalize_labels']:
             #assert self.h['output_multiclass_ordered_p'] == 0., "normalize_labels destroys ordering of labels anyways."
