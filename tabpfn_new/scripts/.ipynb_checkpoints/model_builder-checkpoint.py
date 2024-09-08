@@ -322,6 +322,7 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
                   , epoch_callback=epoch_callback
                   , bptt_extra_samples = config['bptt_extra_samples']
                   , train_mixed_precision = config['train_mixed_precision']
+                  , microbiome_test = config.get("microbiome_test", False)
                   , extra_prior_kwargs_dict={
             'num_features': config['num_features']
             , 'hyperparameters': prior_hyperparameters

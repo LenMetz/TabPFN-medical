@@ -20,6 +20,7 @@ from tabpfn.utils import init_dist
 from torch.cuda.amp import autocast, GradScaler
 from torch import nn
 
+
 class Losses():
     gaussian = nn.GaussianNLLLoss(full=True, reduction='none')
     mse = nn.MSELoss(reduction='none')
@@ -35,7 +36,8 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
           y_encoder_generator=None, pos_encoder_generator=None, decoder=None, extra_prior_kwargs_dict={}, scheduler=get_cosine_schedule_with_warmup,
           load_weights_from_this_state_dict=None, validation_period=10, single_eval_pos_gen=None, bptt_extra_samples=None, gpu_device='cuda:0',
           aggregate_k_gradients=1, verbose=True, style_encoder_generator=None, epoch_callback=None,
-          initializer=None, initialize_with_model=None, train_mixed_precision=False, efficient_eval_masking=True, **model_extra_args
+          initializer=None, initialize_with_model=None, train_mixed_precision=False, efficient_eval_masking=True, 
+          microbiome_test=False, **model_extra_args
           ):
     device = gpu_device if torch.cuda.is_available() else 'cpu:0'
     print(f'Using {device} device')
@@ -191,6 +193,8 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             epoch_start_time = time.time()
             total_loss, total_positional_losses, time_to_get_batch, forward_time, step_time, nan_share, ignore_share =\
                 train_epoch()
+            if microbiome_test:
+                print(mb_test(model))
             if hasattr(dl, 'validate') and epoch % validation_period == 0:
                 with torch.no_grad():
                     val_score = dl.validate(model)
@@ -220,6 +224,21 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             model = model.module
             dl = None
         return total_loss, total_positional_losses, model.to('cpu'), dl
+
+import os
+import sys
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, parent_dir)
+from data_prep_utils import *
+from evaluate import *
+
+
+def mb_test(model, datapath="datasets/data_all.csv"):
+    data, labels = get_microbiome(datapath)
+    metrics = metrics = ["accuracy", "precision", "recall", "roc_auc"]
+    results = pd.DataFrame(np.zeros((1, len(metrics))), index=["Micriobiome TabPFN"], columns=metrics)
+    results[0,:] = cross_validate_sample(model, data, labels, metrics)
+    return results
 
 def _parse_args(config_parser, parser):
     # Do we have a config file to parse?
