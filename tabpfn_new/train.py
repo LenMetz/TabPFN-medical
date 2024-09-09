@@ -37,7 +37,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
           load_weights_from_this_state_dict=None, validation_period=10, single_eval_pos_gen=None, bptt_extra_samples=None, gpu_device='cuda:0',
           aggregate_k_gradients=1, verbose=True, style_encoder_generator=None, epoch_callback=None,
           initializer=None, initialize_with_model=None, train_mixed_precision=False, efficient_eval_masking=True, 
-          microbiome_test=False, **model_extra_args
+          microbiome_test=False, config=None, **model_extra_args
           ):
     device = gpu_device if torch.cuda.is_available() else 'cpu:0'
     print(f'Using {device} device')
@@ -194,7 +194,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             total_loss, total_positional_losses, time_to_get_batch, forward_time, step_time, nan_share, ignore_share =\
                 train_epoch()
             if microbiome_test:
-                print(mb_test(model))
+                print(mb_test(model, config))
             if hasattr(dl, 'validate') and epoch % validation_period == 0:
                 with torch.no_grad():
                     val_score = dl.validate(model)
@@ -231,13 +231,17 @@ parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_dir)
 from data_prep_utils import *
 from evaluate import *
+from scripts.transformer_prediction_interface import TabPFNClassifier
+from scripts.model_builder import save_model
 
-
-def mb_test(model, datapath="datasets/data_all.csv"):
+def mb_test(model, config, datapath="datasets/data_all.csv"):
+    pred_model = TabPFNClassifier(model, config, device='cpu')
     data, labels = get_microbiome(datapath)
+    data = top_non_zero(data)
+    data, labels = unison_shuffled_copies(data, labels)
     metrics = metrics = ["accuracy", "precision", "recall", "roc_auc"]
     results = pd.DataFrame(np.zeros((1, len(metrics))), index=["Micriobiome TabPFN"], columns=metrics)
-    results[0,:] = cross_validate_sample(model, data, labels, metrics)
+    results[:] = cross_validate_sample(pred_model, data, labels, metrics)
     return results
 
 def _parse_args(config_parser, parser):

@@ -106,7 +106,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     models_in_memory = {}
 
-    def __init__(self, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='',
+    def __init__(self, model_par=None, c=None, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='',
                  N_ensemble_configurations=3, no_preprocess_mode=False, multiclass_decoder='permutation',
                  feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32,
                  subsample_features=False):
@@ -146,18 +146,22 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
         # Model file specification (Model name, Epoch)
         i = 0
-        model_key = model_string+'|'+str(device)
-        if model_key in self.models_in_memory:
-            model, c, results_file = self.models_in_memory[model_key]
+        if not model_par:
+            model_key = model_string+'|'+str(device)
+            if model_key in self.models_in_memory:
+                model, c, results_file = self.models_in_memory[model_key]
+            else:
+                model, c, results_file = load_model_workflow(i, -1, add_name=model_string, base_path=base_path, device=device,
+                                                             eval_addition='', only_inference=only_inference)
+                self.models_in_memory[model_key] = (model, c, results_file)
+                if len(self.models_in_memory) == 2:
+                    print('Multiple models in memory. This might lead to memory issues. Consider calling remove_models_from_memory()')
+            #style, temperature = self.load_result_minimal(style_file, i, e)
         else:
-            model, c, results_file = load_model_workflow(i, -1, add_name=model_string, base_path=base_path, device=device,
-                                                         eval_addition='', only_inference=only_inference)
-            self.models_in_memory[model_key] = (model, c, results_file)
-            if len(self.models_in_memory) == 2:
-                print('Multiple models in memory. This might lead to memory issues. Consider calling remove_models_from_memory()')
-        #style, temperature = self.load_result_minimal(style_file, i, e)
-
+            model = (0, 0, model_par)
+            
         self.device = device
+        self.model_par = model_par
         self.model = model
         self.c = c
         self.style = None
