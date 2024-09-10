@@ -9,6 +9,7 @@ from contextlib import nullcontext
 
 import torch
 from torch import nn
+from sklearn.model_selection import train_test_split
 
 import tabpfn.utils as utils
 from tabpfn.transformer import TransformerModel
@@ -127,6 +128,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     # If style is set to None, it should not be transferred to device
                     output = model(tuple(e.to(device) if torch.is_tensor(e) else e for e in data) if isinstance(data, tuple) else data.to(device)
                                    , single_eval_pos=single_eval_pos)
+                    #print(output.shape)
 
                     forward_time = time.time() - before_forward
                     
@@ -242,6 +244,10 @@ def mb_test(model, config, datapath="datasets/data_all.csv"):
     metrics = metrics = ["accuracy", "precision", "recall", "roc_auc"]
     results = pd.DataFrame(np.zeros((1, len(metrics))), index=["Micriobiome TabPFN"], columns=metrics)
     results[:] = cross_validate_sample(pred_model, data, labels, metrics)
+    X_train, X_test, y_train, y_test = train_test_split(data, labels, train_size=1000, test_size=200, random_state=42)
+    pred_model.fit(X_train, y_train)
+    preds = pred_model.predict_proba(X_test)
+    #print(preds[:10])
     return results
 
 def _parse_args(config_parser, parser):

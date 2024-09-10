@@ -364,7 +364,6 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
             output = model(
                     (used_style.repeat(eval_xs.shape[1], 1) if used_style is not None else None, eval_xs, eval_ys.float()),
                     single_eval_pos=eval_position)[:, :, 0:num_classes]
-
             output = output[:, :, 0:num_classes] / torch.exp(softmax_temperature)
             if not return_logits:
                 output = torch.nn.functional.softmax(output, dim=-1)
@@ -376,7 +375,6 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
             #    output[:, :, 0] = 1 - output[:, :, 1]
 
         #print('RESULTS', eval_ys.shape, torch.unique(eval_ys, return_counts=True), output.mean(axis=0))
-
         return output
 
     def preprocess_input(eval_xs, preprocess_transform):
@@ -529,13 +527,12 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
             warnings.filterwarnings("ignore",
                                     message="torch.cuda.amp.autocast only affects CUDA ops, but CUDA is not available.  Disabling.")
             if device == 'cpu':
-                output_batch = checkpoint(predict, batch_input, batch_label, style_, softmax_temperature_, True)
+                output_batch = checkpoint(predict, batch_input, batch_label, style_, softmax_temperature_, True, use_reentrant=False)
             else:
                 with torch.cuda.amp.autocast(enabled=fp16_inference):
-                    output_batch = checkpoint(predict, batch_input, batch_label, style_, softmax_temperature_, True)
+                    output_batch = checkpoint(predict, batch_input, batch_label, style_, softmax_temperature_, True, use_reentrant=False)
         outputs += [output_batch]
     #print('MODEL INFERENCE TIME ('+str(batch_input.device)+' vs '+device+', '+str(fp16_inference)+')', str(time.time()-start))
-
     outputs = torch.cat(outputs, 1)
     for i, ensemble_configuration in enumerate(ensemble_configurations):
         (class_shift_configuration, feature_shift_configuration), preprocess_transform_configuration, styles_configuration = ensemble_configuration
@@ -547,7 +544,6 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
             # transforms every ensemble_configuration into a probability -> equal contribution of every configuration
             output_ = torch.nn.functional.softmax(output_, dim=-1)
         output = output_ if output is None else output + output_
-
     output = output / len(ensemble_configurations)
     if average_logits and not return_logits:
         if fp16_inference:
