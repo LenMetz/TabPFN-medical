@@ -78,16 +78,16 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
         
     def get_sample():
         
-        x = data_sample_func(size=(hyperparameters["base_size"], n_features))
+        x = data_sample_func(size=(hyperparameters["base_size"]*2, n_features))
+        x1, x2 = x[:hyperparameters["base_size"]], x[hyperparameters["base_size"]:]
         if hyperparameters["comp"]:
-            x = to_comp(x)
+            x1 = to_comp(x1)
         y = np.random.normal(0, 1, size=(hyperparameters["base_size"],))
         clf = DecisionTreeRegressor(
             max_depth=depth,
             max_features='sqrt',
         )
-        clf.fit(x, y)
-        x2 = data_sample_func(size=(hyperparameters["n_samples"], n_features))
+        clf.fit(x1, y)
         if hyperparameters["comp"]:
             x2 = to_comp(x2)
         #x2 = transform_some_features_to_categorical(x2, n_categorical_features, n_categorical_classes)

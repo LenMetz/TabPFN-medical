@@ -4,6 +4,8 @@ import argparse
 import time
 import datetime
 import yaml
+import pickle
+import pathlib
 from contextlib import nullcontext
 
 
@@ -21,6 +23,9 @@ from tabpfn.utils import init_dist
 from torch.cuda.amp import autocast, GradScaler
 from torch import nn
 
+
+import warnings
+warnings.filterwarnings("ignore")
 
 class Losses():
     gaussian = nn.GaussianNLLLoss(full=True, reduction='none')
@@ -189,6 +194,22 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
 
     total_loss = float('inf')
     total_positional_losses = float('inf')
+    ### logging
+    if "run_name" not in config or config["run_name"]=="time":
+        run_name = time.strftime("%Y%m%d-%H%M%S")
+    else:
+        run_name = config["run_name"]
+    dir_path = os.path.abspath(os.getcwd())
+    path = dir_path + f"/logs/trainrun_{run_name}"
+    if not os.path.exists(path):
+        os.makedirs(path)
+    with open(path + '/config.pkl', 'wb') as f:
+        pickle.dump(config, f)    
+    with open(path + '/config.txt', 'w') as f:
+        for k, v in config.items():
+            f.write(str(k) + ' >>> '+ str(v) + '\n\n')
+    losses = []
+    mb_results = None
     try:
         for epoch in (range(1, epochs + 1) if epochs is not None else itertools.count(1)):
 
@@ -196,7 +217,9 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             total_loss, total_positional_losses, time_to_get_batch, forward_time, step_time, nan_share, ignore_share =\
                 train_epoch()
             if microbiome_test:
-                print(mb_test(model, config))
+                results = mb_test(model, config)
+                print(results)
+                mb_results = torch.tensor(results.values) if mb_results is None else torch.cat((mb_results, torch.tensor(results.values)), dim=0)
             if hasattr(dl, 'validate') and epoch % validation_period == 0:
                 with torch.no_grad():
                     val_score = dl.validate(model)
@@ -220,7 +243,8 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             scheduler.step()
     except KeyboardInterrupt:
         pass
-
+    torch.save(torch.tensor(losses), path + "/losses")
+    torch.save(mb_results, path + "/mb_results")
     if rank == 0: # trivially true for non-parallel training
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model = model.module
