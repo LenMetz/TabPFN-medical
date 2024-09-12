@@ -18,6 +18,14 @@ class BalancedBinarize(nn.Module):
     def forward(self, x):
         return (x > torch.median(x)).float()
 
+class ImbalancedBinarize(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        split = (torch.topk(x,2,dim=0)[0][1]-torch.topk(x,2,dim=0,largest=False)[0][1])*torch.rand((1))+torch.topk(x,2,dim=0,largest=False)[0][1]
+        return (x > split.float())
+
 def class_sampler_f(min_, max_):
     def s():
         if random.random() > 0.5:
@@ -47,13 +55,11 @@ class MulticlassRank(nn.Module):
 
     def forward(self, x):
         # x has shape (T,B,H)
-
         # CAUTION: This samples the same idx in sequence for each class boundary in a batch
         class_boundaries = torch.randint(0, x.shape[0], (self.num_classes - 1,))
         class_boundaries = x[class_boundaries].unsqueeze(1)
 
         d = (x > class_boundaries).sum(axis=0)
-
         randomized_classes = torch.rand((d.shape[1], )) > self.ordered_p
         d[:, randomized_classes] = randomize_classes(d[:, randomized_classes], self.num_classes)
         reverse_classes = torch.rand((d.shape[1],)) > 0.5
@@ -119,6 +125,8 @@ class FlexibleCategorical(torch.nn.Module):
                                                          )
                 elif self.h['multiclass_type'] == 'multi_node':
                     self.class_assigner = MulticlassMultiNode(self.h['num_classes'])
+                elif self.h['multiclass_type'] == 'imbalanced_binarize':
+                    self.class_assigner = ImbalancedBinarize()
                 else:
                     raise ValueError("Unknow Multiclass type")
             elif self.h['num_classes'] == 2 and self.h['balanced']:

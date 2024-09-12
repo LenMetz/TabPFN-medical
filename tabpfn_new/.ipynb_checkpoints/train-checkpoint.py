@@ -24,15 +24,15 @@ from torch.cuda.amp import autocast, GradScaler
 from torch import nn
 
 
-import warnings
-warnings.filterwarnings("ignore")
-
 class Losses():
     gaussian = nn.GaussianNLLLoss(full=True, reduction='none')
     mse = nn.MSELoss(reduction='none')
     def ce(num_classes):
         num_classes = num_classes.shape[0] if torch.is_tensor(num_classes) else num_classes
         return nn.CrossEntropyLoss(reduction='none', weight=torch.ones(num_classes))
+    def ce_weighted(num_classes, weight):
+        num_classes = num_classes.shape[0] if torch.is_tensor(num_classes) else num_classes
+        return nn.CrossEntropyLoss(reduction='none', weight=weight.float())
     bce = nn.BCEWithLogitsLoss(reduction='none')
 
 
@@ -136,7 +136,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     #print(output.shape)
 
                     forward_time = time.time() - before_forward
-                    
+                    all_targets = targets
                     if single_eval_pos is not None:
                         targets = targets[single_eval_pos:]
                     if isinstance(criterion, nn.GaussianNLLLoss):
@@ -149,7 +149,15 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     elif isinstance(criterion, (nn.MSELoss, nn.BCEWithLogitsLoss)):
                         losses = criterion(output.flatten(), targets.to(device).flatten())
                     elif isinstance(criterion, nn.CrossEntropyLoss):
-                        losses = criterion(output.reshape(-1, n_out), targets.to(device).long().flatten())
+                        if config["weight_classes"]:
+                            weights = (torch.unique(all_targets, return_counts=True)[1]*2/torch.unique(all_targets, return_counts=True)[1]).flip(dims=(0,))
+                            #print(torch.unique(all_targets, return_counts=True))
+                            if len(weights)<2:
+                                weights = torch.tensor([1,1])
+                            criterion_new = Losses.ce_weighted(n_out,weights)
+                            losses = criterion_new(output.reshape(-1, n_out), targets.to(device).long().flatten())
+                        else:
+                            losses = criterion(output.reshape(-1, n_out), targets.to(device).long().flatten())
                     else:
                         losses = criterion(output, targets)
                     #print(output[:3], targets[:3])
@@ -216,6 +224,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             epoch_start_time = time.time()
             total_loss, total_positional_losses, time_to_get_batch, forward_time, step_time, nan_share, ignore_share =\
                 train_epoch()
+            losses.append(total_loss)
             if microbiome_test:
                 results = mb_test(model, config)
                 print(results)
@@ -231,6 +240,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 print(
                     f'| end of epoch {epoch:3d} | time: {(time.time() - epoch_start_time):5.2f}s | mean loss {total_loss:5.2f} | '
                     #f"pos losses {','.join([f'{l:5.2f}' for l in total_positional_losses])}, lr {scheduler.get_last_lr()[0]}"
+                    f' lr{scheduler.get_last_lr()[0]} | '
                     f' data time {time_to_get_batch:5.2f} step time {step_time:5.2f}'
                     f' forward time {forward_time:5.2f}' 
                     f' nan share {nan_share:5.2f} ignore share (for classification tasks) {ignore_share:5.4f}'
@@ -265,7 +275,7 @@ def mb_test(model, config, datapath="datasets/data_all.csv"):
     data, labels = get_microbiome(datapath)
     data = top_non_zero(data)
     data, labels = unison_shuffled_copies(data, labels)
-    metrics = metrics = ["accuracy", "precision", "recall", "roc_auc"]
+    metrics = ["accuracy", "precision", "recall", "roc_auc"]
     results = pd.DataFrame(np.zeros((1, len(metrics))), index=["Micriobiome TabPFN"], columns=metrics)
     results[:] = cross_validate_sample(pred_model, data, labels, metrics)
     X_train, X_test, y_train, y_test = train_test_split(data, labels, train_size=1000, test_size=200, random_state=42)
