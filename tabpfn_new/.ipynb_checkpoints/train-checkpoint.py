@@ -154,6 +154,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                             #print(torch.unique(all_targets, return_counts=True))
                             if len(weights)<2:
                                 weights = torch.tensor([1,1])
+                            weights = torch.nn.functional.softmax(weights.float(), dim=-1)*2
                             criterion_new = Losses.ce_weighted(n_out,weights)
                             losses = criterion_new(output.reshape(-1, n_out), targets.to(device).long().flatten())
                         else:

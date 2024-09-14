@@ -310,7 +310,7 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
                   , nlayers=config['nlayers']
                   , nhid=config['emsize'] * config['nhid_factor']
                   , epochs=epochs
-                  , warmup_epochs=20
+                  , warmup_epochs=config.get('warmup_epochs', 0)
                   , bptt=config['bptt']
                   , gpu_device=device
                   , dropout=config['dropout']
