@@ -25,6 +25,14 @@ class ImbalancedBinarize(nn.Module):
     def forward(self, x):
         split = (torch.topk(x,2,dim=0)[0][1]-torch.topk(x,2,dim=0,largest=False)[0][1])*torch.rand((1))+torch.topk(x,2,dim=0,largest=False)[0][1]
         return (x > split.float())
+        
+class LowImbalancedBinarize(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        split = (torch.topk(x,2,dim=0)[0][1]-torch.topk(x,2,dim=0,largest=False)[0][1])*torch.rand((1))+torch.topk(x,2,dim=0,largest=False)[0][1]
+        return (x > split.float())
 
 def class_sampler_f(min_, max_):
     def s():

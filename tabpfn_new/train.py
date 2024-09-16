@@ -14,7 +14,7 @@ from torch import nn
 from sklearn.model_selection import train_test_split
 
 import tabpfn.utils as utils
-from tabpfn.transformer import TransformerModel
+from tabpfn_new.transformer import TransformerModel
 from tabpfn.utils import get_cosine_schedule_with_warmup, get_openai_lr, StoreDictKeyPair, get_weighted_single_eval_pos_sampler, get_uniform_single_eval_pos_sampler
 import tabpfn.priors as priors
 import tabpfn.encoders as encoders
@@ -58,7 +58,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             return single_eval_pos, bptt
     dl = priordataloader_class(num_steps=steps_per_epoch, batch_size=batch_size, eval_pos_seq_len_sampler=eval_pos_seq_len_sampler, seq_len_maximum=bptt+(bptt_extra_samples if bptt_extra_samples else 0), device=device, **extra_prior_kwargs_dict)
 
-    encoder = encoder_generator(dl.num_features, emsize)
+    encoder = encoder_generator(dl.num_features, emsize) if not config.get("no_encoder", False) else None
     #style_def = dl.get_test_batch()[0][0] # the style in batch of the form ((style, x, y), target, single_eval_pos)
     style_def = None
     #print(f'Style definition of first 3 examples: {style_def[:3] if style_def is not None else None}')
@@ -116,6 +116,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
         ignore_steps = 0
         before_get_batch = time.time()
         assert len(dl) % aggregate_k_gradients == 0, 'Please set the number of steps per epoch s.t. `aggregate_k_gradients` divides it.'
+        thingies = []
         for batch, (data, targets, single_eval_pos) in enumerate(dl):
             if using_dist and not (batch % aggregate_k_gradients == aggregate_k_gradients - 1):
                 cm = model.no_sync()
@@ -128,12 +129,10 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     single_eval_pos = single_eval_pos_gen() if callable(single_eval_pos_gen) else single_eval_pos_gen
                 else:
                     single_eval_pos = targets.shape[0] - bptt_extra_samples
-
                 with autocast(enabled=scaler is not None):
                     # If style is set to None, it should not be transferred to device
                     output = model(tuple(e.to(device) if torch.is_tensor(e) else e for e in data) if isinstance(data, tuple) else data.to(device)
                                    , single_eval_pos=single_eval_pos)
-                    #print(output.shape)
 
                     forward_time = time.time() - before_forward
                     all_targets = targets
@@ -151,7 +150,8 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     elif isinstance(criterion, nn.CrossEntropyLoss):
                         if config["weight_classes"]:
                             weights = (torch.unique(all_targets, return_counts=True)[1]*2/torch.unique(all_targets, return_counts=True)[1]).flip(dims=(0,))
-                            #print(torch.unique(all_targets, return_counts=True))
+                            #print(torch.unique(targets, return_counts=True)[1][-1]/targets.shape[0])
+                            thingies.append(torch.unique(targets, return_counts=True)[1][-1]/targets.shape[0])
                             if len(weights)<2:
                                 weights = torch.tensor([1,1])
                             weights = torch.nn.functional.softmax(weights.float(), dim=-1)*2
@@ -169,7 +169,10 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 if scaler: loss = scaler.scale(loss)
                 loss.backward()
 
-                if batch % aggregate_k_gradients == aggregate_k_gradients - 1:
+                if batch % aggregate_k_gradients == aggregate_k_gradients - 1:                            
+                    print(torch.sum(torch.tensor(thingies))/len(thingies))
+                    print("% positive predictions: ", torch.sum(torch.argmax(output, dim=-1), dim=0)/output.shape[0], "% Positive targets : ", torch.sum(targets, dim=0)/output.shape[0])
+                    print("Train sample accuracy: ", (torch.sum(torch.argmax(output, dim=-1)*targets+(torch.argmax(output, dim=-1)-1)*(targets-1)))/output.shape[0])
                     if scaler: scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
                     try:
@@ -197,8 +200,9 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
 
 
             before_get_batch = time.time()
-        return total_loss / steps_per_epoch, (total_positional_losses / total_positional_losses_recorded).tolist(),\
-               time_to_get_batch, forward_time, step_time, nan_steps.cpu().item()/(batch+1),\
+        #return total_loss / steps_per_epoch, (total_positional_losses / total_positional_losses_recorded).tolist(),\
+        return total_loss / steps_per_epoch, 0, \
+            time_to_get_batch, forward_time, step_time, nan_steps.cpu().item()/(batch+1),\
                ignore_steps.cpu().item()/(batch+1)
 
     total_loss = float('inf')
@@ -281,8 +285,8 @@ def mb_test(model, config, datapath="datasets/data_all.csv"):
     results[:] = cross_validate_sample(pred_model, data, labels, metrics)
     X_train, X_test, y_train, y_test = train_test_split(data, labels, train_size=1000, test_size=200, random_state=42)
     pred_model.fit(X_train, y_train)
-    preds = pred_model.predict_proba(X_test)
-    #print(preds[:10])
+    preds = pred_model.predict(X_test)
+    print("% of positive predictions: ", np.sum(preds)/preds.shape[0])
     return results
 
 def _parse_args(config_parser, parser):

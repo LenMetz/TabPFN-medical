@@ -282,6 +282,8 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
         encoder = encoders.NanHandlingEncoder
     else:
         encoder = partial(encoders.Linear, replace_nan_by_zero=True)
+    if config.get("no_encoder", False):
+        encoder = None
 
     if config['max_num_classes'] == 2:
         loss = Losses.ce(2)

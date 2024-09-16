@@ -50,8 +50,8 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
         M = hyperparameters["mnd_M"] if "mnd_M" in hyperparameters else 1000
         a1 = hyperparameters["mnd_a1"] if "mnd_a1" in hyperparameters else 1
         a2 = hyperparameters["mnd_a2"] if "mnd_a2" in hyperparameters else 5
-        a1 = np.random.uniform(1, 5, size[1])
-        a2 = np.random.uniform(1, 10, size[1])
+        a1 = np.random.uniform(0.5, 5, size[1])
+        a2 = np.random.uniform(0.5, 10, size[1])
         alphas = np.random.beta(a1,a2)#,size[1])
         thetas = [np.random.dirichlet(alphas) for i in range(size[0])]
         #print(thetas, np.sum(thetas))
