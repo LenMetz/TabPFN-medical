@@ -1,10 +1,10 @@
-lr >>> 1e-05
+lr >>> None
 
 dropout >>> 0.0
 
 emsize >>> 512
 
-batch_size >>> 1
+batch_size >>> 4
 
 nlayers >>> 12
 
@@ -158,7 +158,7 @@ microbiome_test >>> True
 
 weight_classes >>> False
 
-run_name >>> forest_fullbalance_noweight
+run_name >>> forest_fullbalance_bce
 
 aggregate_k_gradients >>> 8
 

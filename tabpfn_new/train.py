@@ -37,7 +37,7 @@ class Losses():
 
 # stratified split, such that the class distribution is roughly equal in train and test (before/after split point)
 def balance_split(data, targets, pos):
-    pos = max(min(data.shape[0]-targets.shape[-1]**2-1, pos), targets.shape[-1]**2)
+    pos = max(min(data.shape[0]-2**targets.shape[-1]-1, pos), 2**targets.shape[-1])
     '''for i in range(targets.shape[-1]):
         print(torch.unique(targets[:,i], return_counts=True))'''
     sss = StratifiedShuffleSplit(n_splits=1, test_size = data.shape[0]-pos)
@@ -49,6 +49,7 @@ def balance_split(data, targets, pos):
     X = torch.cat((X_train,X_test), dim=0)
     y = torch.cat((y_train,y_test), dim=0)
     return X, y
+
 
 def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=200, nlayers=6, nhead=2, dropout=0.0,
           epochs=10, steps_per_epoch=100, batch_size=200, bptt=10, lr=None, weight_decay=0.0, warmup_epochs=10, input_normalization=False,
@@ -145,8 +146,8 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 with autocast(enabled=scaler is not None):
                     #print(targets.shape, data[1].shape)
                     # If style is set to None, it should not be transferred to device
-                    new_data, targets = balance_split(data[1], targets, single_eval_pos)
-                    data = (data[0], new_data, data[2])
+                    #new_data, targets = balance_split(data[1], targets, single_eval_pos)
+                    #data = (data[0], new_data, targets)
                     output = model(tuple(e.to(device) if torch.is_tensor(e) else e for e in data) if isinstance(data, tuple) else data.to(device)
                                    , single_eval_pos=single_eval_pos)
 
@@ -181,13 +182,14 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     loss = loss / aggregate_k_gradients
 
                 if scaler: loss = scaler.scale(loss)
-                loss.backward()
-
+                preds = torch.argmax(output, dim=-1) if isinstance(criterion, nn.CrossEntropyLoss) else (torch.nn.functional.sigmoid(output)>0.5).float()[:,:,0]
+                #print(preds)
+                accuracy = torch.mean(torch.sum(preds*targets+(preds-1)*(targets-1), dim=0)/output.shape[0])
+                accs.append(accuracy)
                 if batch % aggregate_k_gradients == aggregate_k_gradients - 1:                            
-                    accuracy = torch.mean(torch.sum(torch.argmax(output, dim=-1)*targets+(torch.argmax(output, dim=-1)-1)*(targets-1), dim=0)/output.shape[0])
-                    accs.append(accuracy)
+                    #print("\nLast output: ", output[:10])
                     print("\n\n% Positive predictions:")
-                    for elem in (torch.sum(torch.argmax(output, dim=-1), dim=0)/output.shape[0]): print(f"{elem:2.3f}  ", end='') 
+                    for elem in (torch.sum(preds, dim=0)/output.shape[0]): print(f"{elem:2.3f}  ", end='') 
                     print("\n% Positive targets:")
                     for elem in (torch.sum(targets, dim=0)/output.shape[0]): print(f"{elem:2.3f}  ", end='') 
                     print(f"\nTrain sample accuracy: {accuracy.item():2.3f}")
@@ -279,6 +281,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
     except KeyboardInterrupt:
         pass
     torch.save(torch.tensor(losses), path + "/losses")
+    torch.save(torch.tensor(accs), path + "/accuracies")
     torch.save(mb_results, path + "/mb_results")
     if rank == 0: # trivially true for non-parallel training
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
