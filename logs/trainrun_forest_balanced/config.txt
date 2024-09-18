@@ -4,7 +4,7 @@ dropout >>> 0.0
 
 emsize >>> 512
 
-batch_size >>> 1
+batch_size >>> 2
 
 nlayers >>> 12
 
@@ -160,5 +160,5 @@ weight_classes >>> True
 
 run_name >>> forest_balanced
 
-aggregate_k_gradients >>> 64
+aggregate_k_gradients >>> 2
 

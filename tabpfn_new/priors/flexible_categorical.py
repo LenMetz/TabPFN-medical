@@ -16,7 +16,8 @@ class BalancedBinarize(nn.Module):
         super().__init__()
 
     def forward(self, x):
-        return (x > torch.median(x)).float()
+        x = x+torch.rand(x.shape)*1e-5
+        return (x > torch.median(x,dim=0)[0]).float()
 
 class ImbalancedBinarize(nn.Module):
     def __init__(self):
@@ -31,6 +32,8 @@ class LowImbalancedBinarize(nn.Module):
         super().__init__()
 
     def forward(self, x):
+        median = torch.median(x)
+        std = torch.std(x)
         split = (torch.topk(x,2,dim=0)[0][1]-torch.topk(x,2,dim=0,largest=False)[0][1])*torch.rand((1))+torch.topk(x,2,dim=0,largest=False)[0][1]
         return (x > split.float())
 

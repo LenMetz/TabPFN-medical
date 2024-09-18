@@ -101,8 +101,8 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
     sample = [get_sample() for _ in range(0, batch_size)]
     x, y = zip(*sample)
     x, y = np.concatenate(x,1), np.concatenate(y,1)
-    x = torch.tensor(x).float()
-    y = torch.tensor(y).float()
+    x = torch.tensor(x).float().to(device)
+    y = torch.tensor(y).float().to(device)
     
     return x, y, y
     

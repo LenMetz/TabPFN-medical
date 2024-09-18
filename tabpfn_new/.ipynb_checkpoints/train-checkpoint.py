@@ -11,7 +11,7 @@ from contextlib import nullcontext
 
 import torch
 from torch import nn
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
 
 import tabpfn.utils as utils
 from tabpfn_new.transformer import TransformerModel
@@ -35,7 +35,20 @@ class Losses():
         return nn.CrossEntropyLoss(reduction='none', weight=weight.float())
     bce = nn.BCEWithLogitsLoss(reduction='none')
 
+# stratified split, such that the class distribution is roughly equal in train and test (before/after split point)
+def balance_split(data, targets, pos):
+    pos = max(min(data.shape[0]-targets.shape[-1]**2-1, pos), targets.shape[-1]**2)
+    '''for i in range(targets.shape[-1]):
+        print(torch.unique(targets[:,i], return_counts=True))'''
+    sss = StratifiedShuffleSplit(n_splits=1, test_size = data.shape[0]-pos)
+    sss.get_n_splits(data,targets)
+    
+    train_index, test_index= next(sss.split(data,targets))
+    X_train, y_train, X_test, y_test = data[train_index], targets[train_index], data[test_index], targets[test_index]
 
+    X = torch.cat((X_train,X_test), dim=0)
+    y = torch.cat((y_train,y_test), dim=0)
+    return X, y
 
 def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=200, nlayers=6, nhead=2, dropout=0.0,
           epochs=10, steps_per_epoch=100, batch_size=200, bptt=10, lr=None, weight_decay=0.0, warmup_epochs=10, input_normalization=False,
@@ -116,7 +129,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
         ignore_steps = 0
         before_get_batch = time.time()
         assert len(dl) % aggregate_k_gradients == 0, 'Please set the number of steps per epoch s.t. `aggregate_k_gradients` divides it.'
-        thingies = []
+        accs = []
         for batch, (data, targets, single_eval_pos) in enumerate(dl):
             if using_dist and not (batch % aggregate_k_gradients == aggregate_k_gradients - 1):
                 cm = model.no_sync()
@@ -130,7 +143,10 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 else:
                     single_eval_pos = targets.shape[0] - bptt_extra_samples
                 with autocast(enabled=scaler is not None):
+                    #print(targets.shape, data[1].shape)
                     # If style is set to None, it should not be transferred to device
+                    new_data, targets = balance_split(data[1], targets, single_eval_pos)
+                    data = (data[0], new_data, data[2])
                     output = model(tuple(e.to(device) if torch.is_tensor(e) else e for e in data) if isinstance(data, tuple) else data.to(device)
                                    , single_eval_pos=single_eval_pos)
 
@@ -141,7 +157,6 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     if isinstance(criterion, nn.GaussianNLLLoss):
                         assert output.shape[-1] == 2, \
                             'need to write a little bit of code to handle multiple regression targets at once'
-
                         mean_pred = output[..., 0]
                         var_pred = output[..., 1].abs()
                         losses = criterion(mean_pred.flatten(), targets.to(device).flatten(), var=var_pred.flatten())
@@ -149,11 +164,10 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                         losses = criterion(output.flatten(), targets.to(device).flatten())
                     elif isinstance(criterion, nn.CrossEntropyLoss):
                         if config["weight_classes"]:
-                            weights = (torch.unique(all_targets, return_counts=True)[1]*2/torch.unique(all_targets, return_counts=True)[1]).flip(dims=(0,))
+                            weights = (torch.unique(all_targets, return_counts=True)[1]*2/torch.unique(all_targets, return_counts=True)[1]).flip(dims=(0,)).to(device)
                             #print(torch.unique(targets, return_counts=True)[1][-1]/targets.shape[0])
-                            thingies.append(torch.unique(targets, return_counts=True)[1][-1]/targets.shape[0])
                             if len(weights)<2:
-                                weights = torch.tensor([1,1])
+                                weights = torch.tensor([1,1]).to(device)
                             weights = torch.nn.functional.softmax(weights.float(), dim=-1)*2
                             criterion_new = Losses.ce_weighted(n_out,weights)
                             losses = criterion_new(output.reshape(-1, n_out), targets.to(device).long().flatten())
@@ -170,9 +184,13 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 loss.backward()
 
                 if batch % aggregate_k_gradients == aggregate_k_gradients - 1:                            
-                    print(torch.sum(torch.tensor(thingies))/len(thingies))
-                    print("% positive predictions: ", torch.sum(torch.argmax(output, dim=-1), dim=0)/output.shape[0], "% Positive targets : ", torch.sum(targets, dim=0)/output.shape[0])
-                    print("Train sample accuracy: ", (torch.sum(torch.argmax(output, dim=-1)*targets+(torch.argmax(output, dim=-1)-1)*(targets-1)))/output.shape[0])
+                    accuracy = torch.mean(torch.sum(torch.argmax(output, dim=-1)*targets+(torch.argmax(output, dim=-1)-1)*(targets-1), dim=0)/output.shape[0])
+                    accs.append(accuracy)
+                    print("\n\n% Positive predictions:")
+                    for elem in (torch.sum(torch.argmax(output, dim=-1), dim=0)/output.shape[0]): print(f"{elem:2.3f}  ", end='') 
+                    print("\n% Positive targets:")
+                    for elem in (torch.sum(targets, dim=0)/output.shape[0]): print(f"{elem:2.3f}  ", end='') 
+                    print(f"\nTrain sample accuracy: {accuracy.item():2.3f}")
                     if scaler: scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
                     try:
@@ -198,10 +216,9 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 nan_steps += nan_share
                 ignore_steps += (targets == -100).float().mean()
 
-
             before_get_batch = time.time()
         #return total_loss / steps_per_epoch, (total_positional_losses / total_positional_losses_recorded).tolist(),\
-        return total_loss / steps_per_epoch, 0, \
+        return total_loss / steps_per_epoch, torch.mean(torch.tensor(accs)), 0, \
             time_to_get_batch, forward_time, step_time, nan_steps.cpu().item()/(batch+1),\
                ignore_steps.cpu().item()/(batch+1)
 
@@ -222,16 +239,18 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
         for k, v in config.items():
             f.write(str(k) + ' >>> '+ str(v) + '\n\n')
     losses = []
+    accs = []
     mb_results = None
     try:
         for epoch in (range(1, epochs + 1) if epochs is not None else itertools.count(1)):
 
             epoch_start_time = time.time()
-            total_loss, total_positional_losses, time_to_get_batch, forward_time, step_time, nan_share, ignore_share =\
+            total_loss, acc, total_positional_losses, time_to_get_batch, forward_time, step_time, nan_share, ignore_share =\
                 train_epoch()
             losses.append(total_loss)
+            accs.append(acc)
             if microbiome_test:
-                results = mb_test(model, config)
+                results = mb_test(model, config, device)
                 print(results)
                 mb_results = torch.tensor(results.values) if mb_results is None else torch.cat((mb_results, torch.tensor(results.values)), dim=0)
             if hasattr(dl, 'validate') and epoch % validation_period == 0:
@@ -245,7 +264,8 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 print(
                     f'| end of epoch {epoch:3d} | time: {(time.time() - epoch_start_time):5.2f}s | mean loss {total_loss:5.2f} | '
                     #f"pos losses {','.join([f'{l:5.2f}' for l in total_positional_losses])}, lr {scheduler.get_last_lr()[0]}"
-                    f' lr{scheduler.get_last_lr()[0]} | '
+                    f' mean accuracy {acc:5.2f} | '
+                    f' lr {scheduler.get_last_lr()[0]} | '
                     f' data time {time_to_get_batch:5.2f} step time {step_time:5.2f}'
                     f' forward time {forward_time:5.2f}' 
                     f' nan share {nan_share:5.2f} ignore share (for classification tasks) {ignore_share:5.4f}'
@@ -275,8 +295,8 @@ from evaluate import *
 from scripts.transformer_prediction_interface import TabPFNClassifier
 from scripts.model_builder import save_model
 
-def mb_test(model, config, datapath="datasets/data_all.csv"):
-    pred_model = TabPFNClassifier(model, config, device='cpu')
+def mb_test(model, config, device, datapath="datasets/data_all.csv"):
+    pred_model = TabPFNClassifier(model, config, device=device)
     data, labels = get_microbiome(datapath)
     data = top_non_zero(data)
     data, labels = unison_shuffled_copies(data, labels)
@@ -286,7 +306,7 @@ def mb_test(model, config, datapath="datasets/data_all.csv"):
     X_train, X_test, y_train, y_test = train_test_split(data, labels, train_size=1000, test_size=200, random_state=42)
     pred_model.fit(X_train, y_train)
     preds = pred_model.predict(X_test)
-    print("% of positive predictions: ", np.sum(preds)/preds.shape[0])
+    print("\n% of positive predictions: ", np.sum(preds)/preds.shape[0])
     return results
 
 def _parse_args(config_parser, parser):
