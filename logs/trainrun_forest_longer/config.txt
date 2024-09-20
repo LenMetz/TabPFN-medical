@@ -24,7 +24,7 @@ sampling >>> normal
 
 epochs >>> 100
 
-num_steps >>> 256
+num_steps >>> 16384
 
 verbose >>> False
 

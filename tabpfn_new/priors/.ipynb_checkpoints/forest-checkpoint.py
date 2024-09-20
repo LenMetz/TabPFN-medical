@@ -58,6 +58,8 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
         X = np.asarray([np.random.multinomial(M, theta)/M for theta in thetas])
         return X
     def get_sample_function(name):
+        if name=="normal":
+            return np.random.normal
         if name=="zinb":
             return zinb
         if name=="mnd":

@@ -176,14 +176,17 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                             losses = criterion(output.reshape(-1, n_out), targets.to(device).long().flatten())
                     else:
                         losses = criterion(output, targets)
+                    #print(losses)
                     #print(output[:3], targets[:3])
                     losses = losses.view(*output.shape[0:2])
                     loss, nan_share = utils.torch_nanmean(losses.mean(0), return_nanshare=True)
                     loss = loss / aggregate_k_gradients
 
                 if scaler: loss = scaler.scale(loss)
-                preds = torch.argmax(output, dim=-1) if isinstance(criterion, nn.CrossEntropyLoss) else (torch.nn.functional.sigmoid(output)>0.5).float()[:,:,0]
-                #print(preds)
+                loss.backward()
+                
+                preds = torch.argmax(output, dim=-1).float() if isinstance(criterion, nn.CrossEntropyLoss) else (torch.nn.functional.sigmoid(output)>0.5).float()[:,:,0]
+                #print(torch.sum(preds).dtype, torch.sum(targets).dtype)
                 accuracy = torch.mean(torch.sum(preds*targets+(preds-1)*(targets-1), dim=0)/output.shape[0])
                 accs.append(accuracy)
                 if batch % aggregate_k_gradients == aggregate_k_gradients - 1:                            
@@ -240,7 +243,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
     with open(path + '/config.txt', 'w') as f:
         for k, v in config.items():
             f.write(str(k) + ' >>> '+ str(v) + '\n\n')
-    losses = []
+    epoch_losses = []
     accs = []
     mb_results = None
     try:
@@ -249,10 +252,11 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             epoch_start_time = time.time()
             total_loss, acc, total_positional_losses, time_to_get_batch, forward_time, step_time, nan_share, ignore_share =\
                 train_epoch()
-            losses.append(total_loss)
+            epoch_losses.append(total_loss)
             accs.append(acc)
             if microbiome_test:
-                results = mb_test(model, config, device)
+                with torch.no_grad():
+                    results = mb_test(model, config, device)
                 print(results)
                 mb_results = torch.tensor(results.values) if mb_results is None else torch.cat((mb_results, torch.tensor(results.values)), dim=0)
             if hasattr(dl, 'validate') and epoch % validation_period == 0:
@@ -280,7 +284,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             scheduler.step()
     except KeyboardInterrupt:
         pass
-    torch.save(torch.tensor(losses), path + "/losses")
+    torch.save(torch.tensor(epoch_losses), path + "/losses")
     torch.save(torch.tensor(accs), path + "/accuracies")
     torch.save(mb_results, path + "/mb_results")
     if rank == 0: # trivially true for non-parallel training

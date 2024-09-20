@@ -1,6 +1,6 @@
 import time
 import random
-
+import matplotlib.pyplot as plt
 import torch
 from torch import nn
 
@@ -16,7 +16,13 @@ class BalancedBinarize(nn.Module):
         super().__init__()
 
     def forward(self, x):
-        x = x+torch.rand(x.shape)*1e-5
+        #plt.hist(x, bins=100)
+        #plt.show()
+        #print(torch.median(x,dim=0)[0])
+        #print(torch.mean((x > torch.median(x,dim=0)[0]).float()))
+        #x = x+torch.rand(x.shape)*1e-5
+        #print(torch.mean((x > torch.median(x,dim=0)[0]).float()))
+        #print(torch.median(x,dim=0)[0])
         return (x > torch.median(x,dim=0)[0]).float()
 
 class ImbalancedBinarize(nn.Module):
@@ -24,7 +30,9 @@ class ImbalancedBinarize(nn.Module):
         super().__init__()
 
     def forward(self, x):
-        split = (torch.topk(x,2,dim=0)[0][1]-torch.topk(x,2,dim=0,largest=False)[0][1])*torch.rand((1))+torch.topk(x,2,dim=0,largest=False)[0][1]
+        high = torch.topk(x,2,dim=0)[0][1]
+        low = torch.topk(x,2,dim=0,largest=False)[0][1]
+        split = (high-low)*torch.rand((1))+low
         return (x > split.float())
         
 class LowImbalancedBinarize(nn.Module):
@@ -232,8 +240,7 @@ class FlexibleCategorical(torch.nn.Module):
             print('Nans in target!')
 
         if self.h['check_is_compatible']:
-            '''
-            for b in range(y.shape[1]):
+            '''for b in range(y.shape[1]):
                 is_compatible, N = False, 0
                 while not is_compatible and N < 10:
                     targets_in_train = torch.unique(y[:self.args['single_eval_pos'], b], sorted=True)
