@@ -66,13 +66,16 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
             return multinomial_dirichlet
         else:
             raise Exception("Sample function "+ name + " not found!")
-    
+
+    y_std = hyperparameters.get("y_std", 1)
     n_classes = get_n_classes(hyperparameters["max_num_classes"])
-    categorical_perc = get_categorical_perc(hyperparameters["categorical_x"])
+    #categorical_perc = get_categorical_perc(hyperparameters["categorical_x"])
     depth = get_depth(hyperparameters["min_depth"], hyperparameters["max_depth"])
+    #print("forest tree depth: ", depth)
     n_features = get_n_features(hyperparameters["min_features"], hyperparameters["max_features"])
-    n_categorical_features = get_n_categorical_features(categorical_perc, n_features)
-    n_categorical_classes = get_n_categorical_classes(n_categorical_features)
+    #print(n_features, depth)
+    #n_categorical_features = get_n_categorical_features(categorical_perc, n_features)
+    #n_categorical_classes = get_n_categorical_classes(n_categorical_features)
     if "data_sample_func" in hyperparameters:
         data_sample_func = get_sample_function(hyperparameters["data_sample_func"])
     else: 
@@ -84,7 +87,14 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
         x1, x2 = x[:hyperparameters["base_size"]], x[hyperparameters["base_size"]:]
         if hyperparameters["comp"]:
             x1 = to_comp(x1)
-        y = np.random.normal(0, 1, size=(hyperparameters["base_size"],))
+        y = np.random.normal(0, y_std, size=(hyperparameters["base_size"],))
+        if hyperparameters.get("alt_ys", False):
+            y = np.concatenate((np.abs(np.random.normal(0, y_std, size=(int(hyperparameters["base_size"]/2),)))+0.15,
+                -np.abs(np.random.normal(0, y_std, size=(int(hyperparameters["base_size"]/2),)))-0.15))
+            np.random.shuffle(y)
+        #y = np.concatenate((np.ones(int(hyperparameters["base_size"]/2)), np.zeros(int(hyperparameters["base_size"]/2))))
+        #np.random.shuffle(y)
+        #c = np.random.choice(np.arange(hyperparameters["base_size"]), size=int(hyperparameters["base_size"]/2), replace=False)
         clf = DecisionTreeRegressor(
             max_depth=depth,
             max_features='sqrt',

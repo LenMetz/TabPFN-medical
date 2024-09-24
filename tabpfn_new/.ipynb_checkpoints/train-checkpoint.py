@@ -131,6 +131,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
         before_get_batch = time.time()
         assert len(dl) % aggregate_k_gradients == 0, 'Please set the number of steps per epoch s.t. `aggregate_k_gradients` divides it.'
         accs = []
+        class_pred_measure = []
         for batch, (data, targets, single_eval_pos) in enumerate(dl):
             if using_dist and not (batch % aggregate_k_gradients == aggregate_k_gradients - 1):
                 cm = model.no_sync()
@@ -189,10 +190,12 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 #print(torch.sum(preds).dtype, torch.sum(targets).dtype)
                 accuracy = torch.mean(torch.sum(preds*targets+(preds-1)*(targets-1), dim=0)/output.shape[0])
                 accs.append(accuracy)
+                class_pred = torch.sum(preds, dim=0)/output.shape[0]
+                class_pred_measure.append(torch.mean((class_pred-0.5)**2))
                 if batch % aggregate_k_gradients == aggregate_k_gradients - 1:                            
                     #print("\nLast output: ", output[:10])
                     print("\n\n% Positive predictions:")
-                    for elem in (torch.sum(preds, dim=0)/output.shape[0]): print(f"{elem:2.3f}  ", end='') 
+                    for elem in (class_pred): print(f"{elem:2.3f}  ", end='') 
                     print("\n% Positive targets:")
                     for elem in (torch.sum(targets, dim=0)/output.shape[0]): print(f"{elem:2.3f}  ", end='') 
                     print(f"\nTrain sample accuracy: {accuracy.item():2.3f}")
@@ -223,7 +226,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
 
             before_get_batch = time.time()
         #return total_loss / steps_per_epoch, (total_positional_losses / total_positional_losses_recorded).tolist(),\
-        return total_loss / steps_per_epoch, torch.mean(torch.tensor(accs)), 0, \
+        return total_loss / steps_per_epoch, torch.mean(torch.tensor(accs)), torch.mean(torch.tensor(class_pred_measure)), 0, \
             time_to_get_batch, forward_time, step_time, nan_steps.cpu().item()/(batch+1),\
                ignore_steps.cpu().item()/(batch+1)
 
@@ -245,15 +248,17 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             f.write(str(k) + ' >>> '+ str(v) + '\n\n')
     epoch_losses = []
     accs = []
+    class_preds = []
     mb_results = None
     try:
         for epoch in (range(1, epochs + 1) if epochs is not None else itertools.count(1)):
 
             epoch_start_time = time.time()
-            total_loss, acc, total_positional_losses, time_to_get_batch, forward_time, step_time, nan_share, ignore_share =\
+            total_loss, acc, class_pred, total_positional_losses, time_to_get_batch, forward_time, step_time, nan_share, ignore_share =\
                 train_epoch()
             epoch_losses.append(total_loss)
             accs.append(acc)
+            class_preds.append(class_pred)
             if microbiome_test:
                 with torch.no_grad():
                     results = mb_test(model, config, device)
@@ -271,6 +276,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     f'| end of epoch {epoch:3d} | time: {(time.time() - epoch_start_time):5.2f}s | mean loss {total_loss:5.2f} | '
                     #f"pos losses {','.join([f'{l:5.2f}' for l in total_positional_losses])}, lr {scheduler.get_last_lr()[0]}"
                     f' mean accuracy {acc:5.2f} | '
+                    f' preds imbalance measure {class_pred:5.2f} | '
                     f' lr {scheduler.get_last_lr()[0]} | '
                     f' data time {time_to_get_batch:5.2f} step time {step_time:5.2f}'
                     f' forward time {forward_time:5.2f}' 
@@ -286,6 +292,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
         pass
     torch.save(torch.tensor(epoch_losses), path + "/losses")
     torch.save(torch.tensor(accs), path + "/accuracies")
+    torch.save(torch.tensor(class_preds), path + "/class_preds")
     torch.save(mb_results, path + "/mb_results")
     if rank == 0: # trivially true for non-parallel training
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):

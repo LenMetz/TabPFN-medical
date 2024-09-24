@@ -25,6 +25,15 @@ class BalancedBinarize(nn.Module):
         #print(torch.median(x,dim=0)[0])
         return (x > torch.median(x,dim=0)[0]).float()
 
+class ForceBalancedBinarize(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        x = x+torch.rand(x.shape)*1e-5
+        return (x > torch.median(x,dim=0)[0]).float()
+
+
 class ImbalancedBinarize(nn.Module):
     def __init__(self):
         super().__init__()
@@ -118,7 +127,10 @@ class MulticlassMultiNode(nn.Module):
         d = torch.multinomial(torch.pow(0.00001+torch.sigmoid(x[:, :, 0:self.num_classes]).reshape(-1, self.num_classes), T), 1, replacement=True).reshape(x.shape[0], x.shape[1])#.float()
         return d
 
-
+def plot_targets(y):
+    plt.hist(y, bins=100)
+    plt.show()
+    
 class FlexibleCategorical(torch.nn.Module):
     def __init__(self, get_batch, hyperparameters, args):
         super(FlexibleCategorical, self).__init__()
@@ -148,10 +160,25 @@ class FlexibleCategorical(torch.nn.Module):
                     self.class_assigner = ImbalancedBinarize()
                 else:
                     raise ValueError("Unknow Multiclass type")
-            elif self.h['num_classes'] == 2 and self.h['balanced']:
-                self.class_assigner = BalancedBinarize()
-            elif self.h['num_classes'] > 2 and self.h['balanced']:
-                raise NotImplementedError("Balanced multiclass training is not possible")
+            elif self.h['num_classes']:
+                if self.h['multiclass_type'] == 'rank':
+                    self.class_assigner = MulticlassRank(self.h['num_classes']
+                                                 , ordered_p=self.h['output_multiclass_ordered_p']
+                                                 )
+                elif self.h['multiclass_type'] == 'value':
+                    self.class_assigner = MulticlassValue(self.h['num_classes']
+                                                         , ordered_p=self.h['output_multiclass_ordered_p']
+                                                         )
+                elif self.h['multiclass_type'] == 'multi_node':
+                    self.class_assigner = MulticlassMultiNode(self.h['num_classes'])
+                elif self.h['multiclass_type'] == 'imbalanced_binarize':
+                    self.class_assigner = ImbalancedBinarize()
+                elif self.h['multiclass_type'] == "balance":
+                    self.class_assigner = BalancedBinarize()
+                elif self.h['multiclass_type'] == "force_balance":
+                    self.class_assigner = ForceBalancedBinarize()
+                else:
+                    raise ValueError("Unknow Multiclass type")
 
     def drop_for_reason(self, x, v):
         nan_prob_sampler = CategoricalActivation(ordered_p=0.0
@@ -214,6 +241,8 @@ class FlexibleCategorical(torch.nn.Module):
             start = time.time()
 
         # Cast to classification if enabled
+        if self.h.get("hist_targets", False):
+            plot_targets(y)
         y = self.class_assigner(y).float()
 
         if time_it:
