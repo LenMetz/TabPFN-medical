@@ -50,6 +50,13 @@ def balance_split(data, targets, pos):
     y = torch.cat((y_train,y_test), dim=0)
     return X, y
 
+# swaps labels such that majority label is always 0
+def align_class_freq(y):
+    counts = torch.unique(y, return_counts=True)[1]
+    if counts[1]>counts[0]:
+        return -y+1
+    else:
+        return y
 
 def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=200, nlayers=6, nhead=2, dropout=0.0,
           epochs=10, steps_per_epoch=100, batch_size=200, bptt=10, lr=None, weight_decay=0.0, warmup_epochs=10, input_normalization=False,
@@ -177,7 +184,6 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                             losses = criterion(output.reshape(-1, n_out), targets.to(device).long().flatten())
                     else:
                         losses = criterion(output, targets)
-                    #print(losses)
                     #print(output[:3], targets[:3])
                     losses = losses.view(*output.shape[0:2])
                     loss, nan_share = utils.torch_nanmean(losses.mean(0), return_nanshare=True)
@@ -188,11 +194,12 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 
                 preds = torch.argmax(output, dim=-1).float() if isinstance(criterion, nn.CrossEntropyLoss) else (torch.nn.functional.sigmoid(output)>0.5).float()[:,:,0]
                 #print(torch.sum(preds).dtype, torch.sum(targets).dtype)
-                accuracy = torch.mean(torch.sum(preds*targets+(preds-1)*(targets-1), dim=0)/output.shape[0])
+                accuracy = torch.mean((preds==targets)[targets!=-100].float())
                 accs.append(accuracy)
                 class_pred = torch.sum(preds, dim=0)/output.shape[0]
                 class_pred_measure.append(torch.mean((class_pred-0.5)**2))
                 if batch % aggregate_k_gradients == aggregate_k_gradients - 1:                            
+                    #print(torch.unique(targets))
                     #print("\nLast output: ", output[:10])
                     print("\n\n% Positive predictions:")
                     for elem in (class_pred): print(f"{elem:2.3f}  ", end='') 

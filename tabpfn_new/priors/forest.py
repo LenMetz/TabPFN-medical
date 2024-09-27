@@ -5,7 +5,7 @@ import torch
 from torch import nn
 import numpy as np
 from sklearn.tree import DecisionTreeRegressor
-
+import matplotlib.pyplot as plt
 
 from tabpfn.utils import default_device
 from .utils import get_batch_to_dataloader
@@ -56,6 +56,7 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
         thetas = [np.random.dirichlet(alphas) for i in range(size[0])]
         #print(thetas, np.sum(thetas))
         X = np.asarray([np.random.multinomial(M, theta)/M for theta in thetas])
+        #X = X + np.random.normal(0,1e-2,X.shape)
         return X
     def get_sample_function(name):
         if name=="normal":
@@ -68,7 +69,7 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
             raise Exception("Sample function "+ name + " not found!")
 
     y_std = hyperparameters.get("y_std", 1)
-    n_classes = get_n_classes(hyperparameters["max_num_classes"])
+    n_classes = get_n_classes(hyperparameters["num_classes"])
     #categorical_perc = get_categorical_perc(hyperparameters["categorical_x"])
     depth = get_depth(hyperparameters["min_depth"], hyperparameters["max_depth"])
     #print("forest tree depth: ", depth)
@@ -97,7 +98,7 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
         #c = np.random.choice(np.arange(hyperparameters["base_size"]), size=int(hyperparameters["base_size"]/2), replace=False)
         clf = DecisionTreeRegressor(
             max_depth=depth,
-            max_features='sqrt',
+            max_features='sqrt',#'sqrt',
         )
         clf.fit(x1, y)
         if hyperparameters["comp"]:

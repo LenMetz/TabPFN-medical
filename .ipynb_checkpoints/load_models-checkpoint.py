@@ -115,8 +115,8 @@ class XGBoostOptim(BaseEstimator, ClassifierMixin):
             model = XGBClassifier(**param)
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
-            accuracy = sklearn.metrics.accuracy_score(y_test, preds)
-            return accuracy
+            roc_auc = sklearn.metrics.roc_auc_score(y_test, preds)
+            return roc_auc
             
         study = optuna.create_study(direction="maximize")
         study.optimize(objective, n_trials=self.n_optim, timeout=600)

@@ -16,13 +16,6 @@ class BalancedBinarize(nn.Module):
         super().__init__()
 
     def forward(self, x):
-        #plt.hist(x, bins=100)
-        #plt.show()
-        #print(torch.median(x,dim=0)[0])
-        #print(torch.mean((x > torch.median(x,dim=0)[0]).float()))
-        #x = x+torch.rand(x.shape)*1e-5
-        #print(torch.mean((x > torch.median(x,dim=0)[0]).float()))
-        #print(torch.median(x,dim=0)[0])
         return (x > torch.median(x,dim=0)[0]).float()
 
 class ForceBalancedBinarize(nn.Module):
@@ -130,7 +123,19 @@ class MulticlassMultiNode(nn.Module):
 def plot_targets(y):
     plt.hist(y, bins=100)
     plt.show()
-    
+
+
+# swaps labels such that majority label is always 0
+def align_class_freq(y):
+    try:
+        counts = torch.unique(y, return_counts=True)[1]
+        if counts[1]>counts[0]:
+            return -y+1
+        else:
+            return y
+    except:
+        return y
+        
 class FlexibleCategorical(torch.nn.Module):
     def __init__(self, get_batch, hyperparameters, args):
         super(FlexibleCategorical, self).__init__()
@@ -145,7 +150,7 @@ class FlexibleCategorical(torch.nn.Module):
         if self.h['num_classes'] == 0:
             self.class_assigner = RegressionNormalized()
         else:
-            if self.h['num_classes'] > 1 and not self.h['balanced']:
+            if self.h['num_classes'] > 2:
                 if self.h['multiclass_type'] == 'rank':
                     self.class_assigner = MulticlassRank(self.h['num_classes']
                                                  , ordered_p=self.h['output_multiclass_ordered_p']
@@ -160,7 +165,7 @@ class FlexibleCategorical(torch.nn.Module):
                     self.class_assigner = ImbalancedBinarize()
                 else:
                     raise ValueError("Unknow Multiclass type")
-            elif self.h['num_classes']:
+            elif self.h['num_classes']==2:
                 if self.h['multiclass_type'] == 'rank':
                     self.class_assigner = MulticlassRank(self.h['num_classes']
                                                  , ordered_p=self.h['output_multiclass_ordered_p']
@@ -198,6 +203,11 @@ class FlexibleCategorical(torch.nn.Module):
         start = time.time()
         #print(self.args_passed["num_features"])
         x, y, y_ = self.get_batch(hyperparameters=self.h, **self.args_passed)
+        if self.h["limit_imbalance"]:
+            while (torch.max(torch.unique(self.class_assigner(y), return_counts=True)[1])/
+                   torch.sum(torch.unique(self.class_assigner(y), return_counts=True)[1]))>0.7:
+                x, y, y_ = self.get_batch(hyperparameters=self.h, **self.args_passed)
+                
         #print(torch.sum(torch.where(torch.sum(torch.abs(x), dim=0)>0,0,1)))
         if time_it:
             print('Flex Forward Block 1', round(time.time() - start, 3))
@@ -244,7 +254,10 @@ class FlexibleCategorical(torch.nn.Module):
         if self.h.get("hist_targets", False):
             plot_targets(y)
         y = self.class_assigner(y).float()
+        if self.h.get("align_majority", False) and self.h["num_classes"]==2:
+            y = align_class_freq(y)
 
+        
         if time_it:
             print('Flex Forward Block 4', round(time.time() - start, 3))
             start = time.time()

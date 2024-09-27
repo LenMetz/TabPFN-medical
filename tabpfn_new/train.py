@@ -140,6 +140,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             with cm:
                 time_to_get_batch = time.time() - before_get_batch
                 before_forward = time.time()
+                
                 if bptt_extra_samples is None:
                     single_eval_pos = single_eval_pos_gen() if callable(single_eval_pos_gen) else single_eval_pos_gen
                 else:
@@ -177,7 +178,6 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                             losses = criterion(output.reshape(-1, n_out), targets.to(device).long().flatten())
                     else:
                         losses = criterion(output, targets)
-                    #print(losses)
                     #print(output[:3], targets[:3])
                     losses = losses.view(*output.shape[0:2])
                     loss, nan_share = utils.torch_nanmean(losses.mean(0), return_nanshare=True)
@@ -188,11 +188,12 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 
                 preds = torch.argmax(output, dim=-1).float() if isinstance(criterion, nn.CrossEntropyLoss) else (torch.nn.functional.sigmoid(output)>0.5).float()[:,:,0]
                 #print(torch.sum(preds).dtype, torch.sum(targets).dtype)
-                accuracy = torch.mean(torch.sum(preds*targets+(preds-1)*(targets-1), dim=0)/output.shape[0])
+                accuracy = torch.mean((preds==targets)[targets!=-100].float())
                 accs.append(accuracy)
                 class_pred = torch.sum(preds, dim=0)/output.shape[0]
                 class_pred_measure.append(torch.mean((class_pred-0.5)**2))
                 if batch % aggregate_k_gradients == aggregate_k_gradients - 1:                            
+                    #print(torch.unique(targets))
                     #print("\nLast output: ", output[:10])
                     print("\n\n% Positive predictions:")
                     for elem in (class_pred): print(f"{elem:2.3f}  ", end='') 
