@@ -11,7 +11,7 @@ def oversample(X, y):
     indices = np.random.randint(0,X_min.shape[0], n_new_samples)
     new_samples = X_min[indices]
     X_new = np.concatenate((X, new_samples), axis=0)
-    y_new = np.concatenate((y, np.full(min_class,n_new_samples)))
+    y_new = np.concatenate((y, np.full(n_new_samples, min_class)))
     return X_new, y_new
 
 # method to fix class imbalance by removing random samples from more frequent class

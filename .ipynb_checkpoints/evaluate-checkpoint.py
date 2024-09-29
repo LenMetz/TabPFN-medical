@@ -30,7 +30,7 @@ def stratified_split(data, labels, cv=3):
         
     return data_folds, labels_folds
 
-def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling=None):
+def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling=None, reduce_tabpfn=True):
     if strat_split:
         X_folds, y_folds = stratified_split(X, y, cv)
     else:

@@ -276,7 +276,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 print(
                     f'| end of epoch {epoch:3d} | time: {(time.time() - epoch_start_time):5.2f}s | mean loss {total_loss:5.2f} | '
                     #f"pos losses {','.join([f'{l:5.2f}' for l in total_positional_losses])}, lr {scheduler.get_last_lr()[0]}"
-                    f' mean accuracy {acc:5.2f} | '
+                    f' mean accuracy {acc:5.4f} | '
                     f' preds imbalance measure {class_pred:5.2f} | '
                     f' lr {scheduler.get_last_lr()[0]} | '
                     f' data time {time_to_get_batch:5.2f} step time {step_time:5.2f}'
@@ -316,7 +316,7 @@ def mb_test(model, config, device, datapath="datasets/data_all.csv"):
     data = top_non_zero(data)
     data, labels = unison_shuffled_copies(data, labels)
     metrics = ["accuracy", "precision", "recall", "roc_auc"]
-    results = pd.DataFrame(np.zeros((1, len(metrics))), index=["Micriobiome TabPFN"], columns=metrics)
+    results = pd.DataFrame(np.zeros((1, len(metrics)+1)), index=["Micriobiome TabPFN"], columns=metrics+["runtime"])
     results[:] = cross_validate_sample(pred_model, data, labels, metrics)
     X_train, X_test, y_train, y_test = train_test_split(data, labels, train_size=1000, test_size=200, random_state=42)
     pred_model.fit(X_train, y_train)
