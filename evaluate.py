@@ -8,13 +8,15 @@ def scores(y_test, y_pred):
     return accuracy_score(y_test, y_pred), precision_score(y_test, y_pred), roc_auc_score(y_test, y_pred)
 
 # return cv folds preserving original class distribution
-def stratified_split(data, labels, cv=3):
-    size = labels.shape[0]
+def stratified_split(data, labels, cv=3, max_samples=None):
+    if max_samples is None:
+        size = labels.shape[0]
+    else:
+        size = np.floor(max_samples*(cv/(cv-1)))
     fold_size = size//cv
     counts = np.unique(labels, return_counts=True)
-    c0_size = np.floor(fold_size*counts[1][0]/size).astype(int)
-    c1_size = np.floor(fold_size*counts[1][1]/size).astype(int)#fold_size-c0_size
-    
+    c0_size = np.floor(fold_size*counts[1][0]/labels.shape[0]).astype(int)
+    c1_size = np.floor(fold_size*counts[1][1]/labels.shape[0]).astype(int)#fold_size-c0_size
     c0_data = data[labels==0]
     c1_data = data[labels==1]
     np.random.shuffle(c0_data)
@@ -30,9 +32,9 @@ def stratified_split(data, labels, cv=3):
         
     return data_folds, labels_folds
 
-def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling=None, reduce_tabpfn=True):
+def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling=None, max_samples=None):
     if strat_split:
-        X_folds, y_folds = stratified_split(X, y, cv)
+        X_folds, y_folds = stratified_split(X, y, cv, max_samples)
     else:
         X_folds, y_folds = np.array_split(X, cv), np.array_split(y, cv)
     results = np.zeros((len(metrics)+1))
@@ -45,7 +47,7 @@ def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling
         if sampling: X_train, y_train = sampling(X_train, y_train)
         X_train, y_train = unison_shuffled_copies(X_train, y_train)
         start_time = time.time()
-        if model_clean.__class__.__name__=="TabPFNClassifier": 
+        if model_clean.__class__.__name__=="TabPFNClassifier":
             model_clean.fit(X_train, y_train, overwrite_warning=True)
         else:
             model_clean.fit(X_train, y_train)

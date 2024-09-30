@@ -103,6 +103,19 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
                 else:
                     causes = torch.normal(0., 1., (seq_len, 1, self.num_causes), device=device).float()
                 return causes
+                
+            def sample_mnd(size=(1000,100)):
+                M = hyperparameters["mnd_M"] if "mnd_M" in hyperparameters else 1000
+                a1 = hyperparameters["mnd_a1"] if "mnd_a1" in hyperparameters else 1
+                a2 = hyperparameters["mnd_a2"] if "mnd_a2" in hyperparameters else 5
+                a1 = np.random.uniform(0.5, 5, size[1])
+                a2 = np.random.uniform(0.5, 10, size[1])
+                alphas = np.random.beta(a1,a2)#,size[1])
+                thetas = [np.random.dirichlet(alphas) for i in range(size[0])]
+                #print(thetas, np.sum(thetas))
+                X = np.asarray([np.random.multinomial(M, theta)/M for theta in thetas])
+                #X = X + np.random.normal(0,1e-2,X.shape)
+                return torch.unsqueeze(torch.from_numpy(X).float(), dim=1)
 
             if self.sampling == 'normal':
                 causes = sample_normal()
@@ -125,6 +138,8 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
                 causes = torch.cat([sample_cause(n).unsqueeze(-1) for n in range(self.num_causes)], -1)
             elif self.sampling == 'uniform':
                 causes = torch.rand((seq_len, 1, self.num_causes), device=device)
+            elif self.sampling == 'mnd':
+                causes = sample_mnd((seq_len, self.num_causes))
             else:
                 raise ValueError(f'Sampling is set to invalid setting: {sampling}.')
 

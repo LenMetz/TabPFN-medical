@@ -149,21 +149,23 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         if not model_par:
             model_key = model_string+'|'+str(device)
             if model_key in self.models_in_memory:
-                model, c, results_file = self.models_in_memory[model_key]
+                model, config, results_file = self.models_in_memory[model_key]
             else:
-                model, c, results_file = load_model_workflow(i, -1, add_name=model_string, base_path=base_path, device=device,
+                model, config, results_file = load_model_workflow(i, -1, add_name=model_string, base_path=base_path, device=device,
                                                              eval_addition='', only_inference=only_inference)
-                self.models_in_memory[model_key] = (model, c, results_file)
+                self.models_in_memory[model_key] = (model, config, results_file)
                 if len(self.models_in_memory) == 2:
                     print('Multiple models in memory. This might lead to memory issues. Consider calling remove_models_from_memory()')
             #style, temperature = self.load_result_minimal(style_file, i, e)
         else:
             model = (0, 0, model_par)
-            
+            config = c
+        
         self.device = device
         self.model_par = model_par
         self.model = model
         self.c = c
+        self.config = config
         self.style = None
         self.temperature = None
         self.N_ensemble_configurations = N_ensemble_configurations
@@ -172,9 +174,9 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.i = i
         self.model_string = model_string
 
-        self.max_num_features = self.c['num_features']
-        self.max_num_classes = self.c['max_num_classes']
-        self.differentiable_hps_as_style = self.c['differentiable_hps_as_style']
+        self.max_num_features = self.config['num_features']
+        self.max_num_classes = self.config['max_num_classes']
+        self.differentiable_hps_as_style = self.config['differentiable_hps_as_style']
 
         self.no_preprocess_mode = no_preprocess_mode
         self.feature_shift_decoder = feature_shift_decoder
@@ -289,7 +291,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                                          return_logits=return_logits,
                                          no_grad=self.no_grad,
                                          batch_size_inference=self.batch_size_inference,
-                                         **get_params_from_config(self.c))
+                                         **get_params_from_config(self.config))
         prediction_, y_ = prediction.squeeze(0), y_full.squeeze(1).long()[eval_pos:]
 
         return prediction_.detach().cpu().numpy() if self.no_grad else prediction_

@@ -145,43 +145,42 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     single_eval_pos = single_eval_pos_gen() if callable(single_eval_pos_gen) else single_eval_pos_gen
                 else:
                     single_eval_pos = targets.shape[0] - bptt_extra_samples
-                with autocast(enabled=scaler is not None):
-                    #print(targets.shape, data[1].shape)
-                    # If style is set to None, it should not be transferred to device
-                    #new_data, targets = balance_split(data[1], targets, single_eval_pos)
-                    #data = (data[0], new_data, targets)
-                    output = model(tuple(e.to(device) if torch.is_tensor(e) else e for e in data) if isinstance(data, tuple) else data.to(device)
-                                   , single_eval_pos=single_eval_pos)
+                #print(targets.shape, data[1].shape)
+                # If style is set to None, it should not be transferred to device
+                #new_data, targets = balance_split(data[1], targets, single_eval_pos)
+                #data = (data[0], new_data, targets)
+                output = model(tuple(e.to(device) if torch.is_tensor(e) else e for e in data) if isinstance(data, tuple) else data.to(device)
+                               , single_eval_pos=single_eval_pos)
 
-                    forward_time = time.time() - before_forward
-                    all_targets = targets
-                    if single_eval_pos is not None:
-                        targets = targets[single_eval_pos:]
-                    if isinstance(criterion, nn.GaussianNLLLoss):
-                        assert output.shape[-1] == 2, \
-                            'need to write a little bit of code to handle multiple regression targets at once'
-                        mean_pred = output[..., 0]
-                        var_pred = output[..., 1].abs()
-                        losses = criterion(mean_pred.flatten(), targets.to(device).flatten(), var=var_pred.flatten())
-                    elif isinstance(criterion, (nn.MSELoss, nn.BCEWithLogitsLoss)):
-                        losses = criterion(output.flatten(), targets.to(device).flatten())
-                    elif isinstance(criterion, nn.CrossEntropyLoss):
-                        if config["weight_classes"]:
-                            weights = (torch.unique(all_targets, return_counts=True)[1]*2/torch.unique(all_targets, return_counts=True)[1]).flip(dims=(0,)).to(device)
-                            #print(torch.unique(targets, return_counts=True)[1][-1]/targets.shape[0])
-                            if len(weights)<2:
-                                weights = torch.tensor([1,1]).to(device)
-                            weights = torch.nn.functional.softmax(weights.float(), dim=-1)*2
-                            criterion_new = Losses.ce_weighted(n_out,weights)
-                            losses = criterion_new(output.reshape(-1, n_out), targets.to(device).long().flatten())
-                        else:
-                            losses = criterion(output.reshape(-1, n_out), targets.to(device).long().flatten())
+                forward_time = time.time() - before_forward
+                all_targets = targets
+                if single_eval_pos is not None:
+                    targets = targets[single_eval_pos:]
+                if isinstance(criterion, nn.GaussianNLLLoss):
+                    assert output.shape[-1] == 2, \
+                        'need to write a little bit of code to handle multiple regression targets at once'
+                    mean_pred = output[..., 0]
+                    var_pred = output[..., 1].abs()
+                    losses = criterion(mean_pred.flatten(), targets.to(device).flatten(), var=var_pred.flatten())
+                elif isinstance(criterion, (nn.MSELoss, nn.BCEWithLogitsLoss)):
+                    losses = criterion(output.flatten(), targets.to(device).flatten())
+                elif isinstance(criterion, nn.CrossEntropyLoss):
+                    if config["weight_classes"]:
+                        weights = (torch.unique(all_targets, return_counts=True)[1]*2/torch.unique(all_targets, return_counts=True)[1]).flip(dims=(0,)).to(device)
+                        #print(torch.unique(targets, return_counts=True)[1][-1]/targets.shape[0])
+                        if len(weights)<2:
+                            weights = torch.tensor([1,1]).to(device)
+                        weights = torch.nn.functional.softmax(weights.float(), dim=-1)*2
+                        criterion_new = Losses.ce_weighted(n_out,weights)
+                        losses = criterion_new(output.reshape(-1, n_out), targets.to(device).long().flatten())
                     else:
-                        losses = criterion(output, targets)
-                    #print(output[:3], targets[:3])
-                    losses = losses.view(*output.shape[0:2])
-                    loss, nan_share = utils.torch_nanmean(losses.mean(0), return_nanshare=True)
-                    loss = loss / aggregate_k_gradients
+                        losses = criterion(output.reshape(-1, n_out), targets.to(device).long().flatten())
+                else:
+                    losses = criterion(output, targets)
+                #print(output[:3], targets[:3])
+                losses = losses.view(*output.shape[0:2])
+                loss, nan_share = utils.torch_nanmean(losses.mean(0), return_nanshare=True)
+                loss = loss / aggregate_k_gradients
 
                 if scaler: loss = scaler.scale(loss)
                 loss.backward()
@@ -263,7 +262,6 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             if microbiome_test:
                 with torch.no_grad():
                     results = mb_test(model, config, device)
-                print(results)
                 mb_results = torch.tensor(results.values) if mb_results is None else torch.cat((mb_results, torch.tensor(results.values)), dim=0)
             if hasattr(dl, 'validate') and epoch % validation_period == 0:
                 with torch.no_grad():
@@ -311,17 +309,21 @@ from scripts.transformer_prediction_interface import TabPFNClassifier
 from scripts.model_builder import save_model
 
 def mb_test(model, config, device, datapath="datasets/data_all.csv"):
-    pred_model = TabPFNClassifier(model, config, device=device)
-    data, labels = get_microbiome(datapath)
-    data = top_non_zero(data)
-    data, labels = unison_shuffled_copies(data, labels)
-    metrics = ["accuracy", "precision", "recall", "roc_auc"]
-    results = pd.DataFrame(np.zeros((1, len(metrics)+1)), index=["Micriobiome TabPFN"], columns=metrics+["runtime"])
-    results[:] = cross_validate_sample(pred_model, data, labels, metrics)
-    X_train, X_test, y_train, y_test = train_test_split(data, labels, train_size=1000, test_size=200, random_state=42)
-    pred_model.fit(X_train, y_train)
-    preds = pred_model.predict(X_test)
-    print("\n% of positive predictions: ", np.sum(preds)/preds.shape[0])
+    names = ["no sampling", "undersampling"]
+    for ii, sampling in enumerate([None, undersample]):
+        print("MB test with ", names[ii])
+        pred_model = TabPFNClassifier(model, config, device=device, no_preprocess_mode=False)
+        data, labels = get_microbiome(datapath)
+        data = top_non_zero(data)
+        data, labels = unison_shuffled_copies(data, labels)
+        metrics = ["accuracy", "precision", "recall", "roc_auc"]
+        results = pd.DataFrame(np.zeros((1, len(metrics)+1)), index=["Micriobiome TabPFN"], columns=metrics+["runtime"])
+        results[:] = cross_validate_sample(pred_model, data, labels, metrics, strat_split=True, cv=3, sampling=sampling, max_samples=1000)
+        X_train, X_test, y_train, y_test = train_test_split(data, labels, train_size=1000, test_size=200, random_state=42)
+        pred_model.fit(X_train, y_train)
+        preds = pred_model.predict(X_test)
+        print("\n% of positive predictions: ", np.sum(preds)/preds.shape[0])
+        print(results)
     return results
 
 def _parse_args(config_parser, parser):
