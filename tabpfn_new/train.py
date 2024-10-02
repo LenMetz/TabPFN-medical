@@ -147,8 +147,8 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     single_eval_pos = targets.shape[0] - bptt_extra_samples
                 #print(targets.shape, data[1].shape)
                 # If style is set to None, it should not be transferred to device
-                #new_data, targets = balance_split(data[1], targets, single_eval_pos)
-                #data = (data[0], new_data, targets)
+                new_data, targets = balance_split(data[1], targets, single_eval_pos)
+                data = (data[0], new_data, targets)
                 output = model(tuple(e.to(device) if torch.is_tensor(e) else e for e in data) if isinstance(data, tuple) else data.to(device)
                                , single_eval_pos=single_eval_pos)
 
@@ -226,7 +226,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
 
             before_get_batch = time.time()
         #return total_loss / steps_per_epoch, (total_positional_losses / total_positional_losses_recorded).tolist(),\
-        return total_loss / steps_per_epoch, torch.mean(torch.tensor(accs)), torch.mean(torch.tensor(class_pred_measure)), 0, \
+        return total_loss / steps_per_epoch, torch.nanmean(torch.tensor(accs)), torch.mean(torch.tensor(class_pred_measure)), 0, \
             time_to_get_batch, forward_time, step_time, nan_steps.cpu().item()/(batch+1),\
                ignore_steps.cpu().item()/(batch+1)
 
@@ -252,8 +252,11 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
     mb_results = None
     try:
         for epoch in (range(1, epochs + 1) if epochs is not None else itertools.count(1)):
-
             epoch_start_time = time.time()
+            if extra_prior_kwargs_dict["hyperparameters"]["multiclass_type"] == "variable_balance":
+                extra_prior_kwargs_dict["hyperparameters"]["epoch_frac"] = (epoch/epochs)**2
+                dl = priordataloader_class(num_steps=steps_per_epoch, batch_size=batch_size, eval_pos_seq_len_sampler=eval_pos_seq_len_sampler, seq_len_maximum=bptt+(bptt_extra_samples if bptt_extra_samples else 0), device=device, **extra_prior_kwargs_dict)
+                dl.model = model
             total_loss, acc, class_pred, total_positional_losses, time_to_get_batch, forward_time, step_time, nan_share, ignore_share =\
                 train_epoch()
             epoch_losses.append(total_loss)
@@ -320,6 +323,8 @@ def mb_test(model, config, device, datapath="datasets/data_all.csv"):
         results = pd.DataFrame(np.zeros((1, len(metrics)+1)), index=["Micriobiome TabPFN"], columns=metrics+["runtime"])
         results[:] = cross_validate_sample(pred_model, data, labels, metrics, strat_split=True, cv=3, sampling=sampling, max_samples=1000)
         X_train, X_test, y_train, y_test = train_test_split(data, labels, train_size=1000, test_size=200, random_state=42)
+        if sampling: X_train, y_train = sampling(X_train, y_train)
+        X_train, y_train = unison_shuffled_copies(X_train, y_train)
         pred_model.fit(X_train, y_train)
         preds = pred_model.predict(X_test)
         print("\n% of positive predictions: ", np.sum(preds)/preds.shape[0])

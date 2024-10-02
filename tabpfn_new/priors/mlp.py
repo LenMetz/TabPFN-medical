@@ -64,12 +64,16 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
                 def generate_module(layer_idx, out_dim):
                     # Determine std of each noise term in initialization, so that is shared in runs
                     # torch.abs(torch.normal(torch.zeros((out_dim)), self.noise_std)) - Change std for each dimension?
-                    noise = (GaussianNoise(torch.abs(torch.normal(torch.zeros(size=(1, out_dim), device=device), float(self.noise_std))), device=device)
-                         if self.pre_sample_weights else GaussianNoise(float(self.noise_std), device=device))
+                    if hyperparameters.get("mlp_noise", True):
+                        noise = (GaussianNoise(torch.abs(torch.normal(torch.zeros(size=(1, out_dim), device=device), float(self.noise_std))), device=device)
+                             if self.pre_sample_weights else GaussianNoise(float(self.noise_std), device=device))
+                    else:
+                        noise = torch.nn.Identity()
                     return [
                         nn.Sequential(*[self.prior_mlp_activations()
                             , nn.Linear(self.prior_mlp_hidden_dim, out_dim)
-                            , noise])
+                            , noise
+                                       ])
                     ]
 
                 self.layers = [nn.Linear(self.num_causes, self.prior_mlp_hidden_dim, device=device)]
@@ -77,24 +81,31 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
                 if not self.is_causal:
                     self.layers += generate_module(-1, num_outputs)
                 self.layers = nn.Sequential(*self.layers)
-
+                #print("num layers: ", self.num_layers, "hidden dim: ", self.prior_mlp_hidden_dim, "act func: ", self.prior_mlp_activations(), "noise: ", self.noise_std)
+                #print("num_features: ", num_features, "is_causal", self.is_causal, "block_drop", self.block_wise_dropout)
                 # Initialize Model parameters
                 for i, (n, p) in enumerate(self.layers.named_parameters()):
-                    if self.block_wise_dropout:
-                        if len(p.shape) == 2: # Only apply to weight matrices and not bias
-                            nn.init.zeros_(p)
-                            # TODO: N blocks should be a setting
-                            n_blocks = random.randint(1, math.ceil(math.sqrt(min(p.shape[0], p.shape[1]))))
-                            w, h = p.shape[0] // n_blocks, p.shape[1] // n_blocks
-                            keep_prob = (n_blocks*w*h) / p.numel()
-                            for block in range(0, n_blocks):
-                                nn.init.normal_(p[w * block: w * (block+1), h * block: h * (block+1)], std=self.init_std / keep_prob**(1/2 if self.prior_mlp_scale_weights_sqrt else 1))
-                    else:
-                        if len(p.shape) == 2: # Only apply to weight matrices and not bias
-                            dropout_prob = self.prior_mlp_dropout_prob if i > 0 else 0.0  # Don't apply dropout in first layer
-                            dropout_prob = min(dropout_prob, 0.99)
-                            nn.init.normal_(p, std=self.init_std / (1. - dropout_prob**(1/2 if self.prior_mlp_scale_weights_sqrt else 1)))
-                            p *= torch.bernoulli(torch.zeros_like(p) + 1. - dropout_prob)
+                    if i<self.num_layers-1:
+                        if self.block_wise_dropout:
+                            if len(p.shape) == 2: # Only apply to weight matrices and not bias
+                                nn.init.zeros_(p)
+                                # TODO: N blocks should be a setting
+                                n_blocks = random.randint(1, math.ceil(math.sqrt(min(p.shape[0], p.shape[1]))))
+                                w, h = p.shape[0] // n_blocks, p.shape[1] // n_blocks
+                                keep_prob = (n_blocks*w*h) / p.numel()
+                                for block in range(0, n_blocks):
+                                    nn.init.normal_(p[w * block: w * (block+1), h * block: h * (block+1)], std=self.init_std / keep_prob**(1/2 if self.prior_mlp_scale_weights_sqrt else 1))
+                        else:
+                            if len(p.shape) == 2: # Only apply to weight matrices and not bias
+                                dropout_prob = self.prior_mlp_dropout_prob if i > 0 else 0.0  # Don't apply dropout in first layer
+                                dropout_prob = min(dropout_prob, 0.99)
+                                #print(dropout_prob)
+                                nn.init.normal_(p, std=self.init_std / (1. - dropout_prob**(1/2 if self.prior_mlp_scale_weights_sqrt else 1)))
+                                drop = torch.bernoulli(torch.zeros_like(p) + 1. - dropout_prob)
+                                #print(p, drop)
+                                p *= drop
+                            #else:
+                                #print("bias", p)
 
         def forward(self):
             def sample_normal():
@@ -115,7 +126,7 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
                 #print(thetas, np.sum(thetas))
                 X = np.asarray([np.random.multinomial(M, theta)/M for theta in thetas])
                 #X = X + np.random.normal(0,1e-2,X.shape)
-                return torch.unsqueeze(torch.from_numpy(X).float(), dim=1)
+                return torch.unsqueeze(torch.from_numpy(X).float(), dim=1).to(device)
 
             if self.sampling == 'normal':
                 causes = sample_normal()
@@ -142,10 +153,12 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
                 causes = sample_mnd((seq_len, self.num_causes))
             else:
                 raise ValueError(f'Sampling is set to invalid setting: {sampling}.')
-
+            
             outputs = [causes]
             for layer in self.layers:
                 outputs.append(layer(outputs[-1]))
+            #for l in outputs:
+                #print(l[0,:])
             outputs = outputs[2:]
 
             if self.is_causal:

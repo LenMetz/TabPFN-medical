@@ -12,7 +12,7 @@ def stratified_split(data, labels, cv=3, max_samples=None):
     if max_samples is None:
         size = labels.shape[0]
     else:
-        size = np.floor(max_samples*(cv/(cv-1)))
+        size = min(labels.shape[0],np.floor(max_samples*(cv/(cv-1))))
     fold_size = size//cv
     counts = np.unique(labels, return_counts=True)
     c0_size = np.floor(fold_size*counts[1][0]/labels.shape[0]).astype(int)

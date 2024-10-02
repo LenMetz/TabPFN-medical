@@ -74,7 +74,7 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
     depth = get_depth(hyperparameters["min_depth"], hyperparameters["max_depth"])
     #print("forest tree depth: ", depth)
     n_features = get_n_features(hyperparameters["min_features"], hyperparameters["max_features"])
-    #print(n_features, depth)
+    print(n_features, depth)
     #n_categorical_features = get_n_categorical_features(categorical_perc, n_features)
     #n_categorical_classes = get_n_categorical_classes(n_categorical_features)
     if "data_sample_func" in hyperparameters:

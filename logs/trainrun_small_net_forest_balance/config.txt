@@ -4,7 +4,7 @@ dropout >>> 0.0
 
 emsize >>> 64
 
-batch_size >>> 8
+batch_size >>> 1
 
 nlayers >>> 12
 
@@ -24,7 +24,7 @@ sampling >>> mnd
 
 epochs >>> 50
 
-num_steps >>> 8
+num_steps >>> 1
 
 verbose >>> False
 
@@ -138,13 +138,7 @@ base_size >>> 1000
 
 n_estimators >>> 1
 
-min_depth >>> 5
-
-max_depth >>> 10
-
 categorical_x >>> False
-
-data_sample_func >>> mnd
 
 comp >>> False
 
@@ -156,6 +150,14 @@ normalize_ignore_label_too >>> False
 
 normalize >>> True
 
+min_depth >>> 5
+
+max_depth >>> 10
+
+data_sample_func >>> mnd
+
+mlp_noise >>> False
+
 align_majority >>> False
 
 limit_imbalance >>> False
@@ -164,7 +166,7 @@ microbiome_test >>> True
 
 weight_classes >>> False
 
-run_name >>> small_net_forest_balance
+aggregate_k_gradients >>> 1
 
-aggregate_k_gradients >>> 8
+run_name >>> small_net_forest_balance
 

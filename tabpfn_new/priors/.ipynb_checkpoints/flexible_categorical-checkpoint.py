@@ -26,7 +26,17 @@ class ForceBalancedBinarize(nn.Module):
         x = x+torch.rand(x.shape)*1e-5
         return (x > torch.median(x,dim=0)[0]).float()
 
-
+class VariableImbalancedBinarize(nn.Module):
+    def __init__(self, epoch_frac):
+        super().__init__()
+        self.epoch_frac = epoch_frac
+        
+    def forward(self, x):
+        std = torch.std(x,dim=0)
+        med = torch.median(x,dim=0)[0]
+        split = med + self.epoch_frac*torch.normal(0, std)
+        return (x > split).float()
+        
 class ImbalancedBinarize(nn.Module):
     def __init__(self):
         super().__init__()
@@ -182,6 +192,8 @@ class FlexibleCategorical(torch.nn.Module):
                     self.class_assigner = BalancedBinarize()
                 elif self.h['multiclass_type'] == "force_balance":
                     self.class_assigner = ForceBalancedBinarize()
+                elif self.h['multiclass_type'] == "variable_balance":
+                    self.class_assigner = VariableImbalancedBinarize(self.h["epoch_frac"])
                 else:
                     raise ValueError("Unknow Multiclass type")
 
