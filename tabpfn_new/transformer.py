@@ -128,7 +128,6 @@ class TransformerModel(nn.Module):
                 src_mask = (self.generate_global_att_globaltokens_matrix(*src_mask_args).to(x_src.device),
                             self.generate_global_att_trainset_matrix(*src_mask_args).to(x_src.device),
                             self.generate_global_att_query_matrix(*src_mask_args).to(x_src.device))
-
         train_x = x_src[:single_eval_pos] + y_src[:single_eval_pos]
         src = torch.cat([global_src, style_src, train_x, x_src[single_eval_pos:]], 0)
 

@@ -37,7 +37,8 @@ class Losses():
 
 # stratified split, such that the class distribution is roughly equal in train and test (before/after split point)
 def balance_split(data, targets, pos):
-    pos = max(min(data.shape[0]-2**targets.shape[-1]-1, pos), 2**targets.shape[-1])
+    print(targets.shape)
+    #pos = max(min(data.shape[0]-2**targets.shape[-1]-1, pos), 2**targets.shape[-1])
     '''for i in range(targets.shape[-1]):
         print(torch.unique(targets[:,i], return_counts=True))'''
     sss = StratifiedShuffleSplit(n_splits=1, test_size = data.shape[0]-pos)
@@ -147,8 +148,8 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     single_eval_pos = targets.shape[0] - bptt_extra_samples
                 #print(targets.shape, data[1].shape)
                 # If style is set to None, it should not be transferred to device
-                new_data, targets = balance_split(data[1], targets, single_eval_pos)
-                data = (data[0], new_data, targets)
+                #new_data, targets = balance_split(data[1], targets, single_eval_pos)
+                #data = (data[0], new_data, targets)
                 output = model(tuple(e.to(device) if torch.is_tensor(e) else e for e in data) if isinstance(data, tuple) else data.to(device)
                                , single_eval_pos=single_eval_pos)
 
@@ -166,11 +167,14 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     losses = criterion(output.flatten(), targets.to(device).flatten())
                 elif isinstance(criterion, nn.CrossEntropyLoss):
                     if config["weight_classes"]:
-                        weights = (torch.unique(all_targets, return_counts=True)[1]*2/torch.unique(all_targets, return_counts=True)[1]).flip(dims=(0,)).to(device)
+                        #weights = (torch.unique(all_targets, return_counts=True)[1]*2/torch.unique(all_targets, return_counts=True)[1]).flip(dims=(0,)).to(device)
+                        weights = (torch.unique(all_targets, return_counts=True)[1]*2/torch.sum(torch.unique(all_targets, return_counts=True)[1])).to(device)
+                        #print(weights)
                         #print(torch.unique(targets, return_counts=True)[1][-1]/targets.shape[0])
                         if len(weights)<2:
                             weights = torch.tensor([1,1]).to(device)
-                        weights = torch.nn.functional.softmax(weights.float(), dim=-1)*2
+                        #weights = torch.nn.functional.softmax(weights.float(), dim=-1)*2
+                        
                         criterion_new = Losses.ce_weighted(n_out,weights)
                         losses = criterion_new(output.reshape(-1, n_out), targets.to(device).long().flatten())
                     else:
@@ -230,72 +234,74 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
             time_to_get_batch, forward_time, step_time, nan_steps.cpu().item()/(batch+1),\
                ignore_steps.cpu().item()/(batch+1)
 
+    
     total_loss = float('inf')
     total_positional_losses = float('inf')
-    ### logging
-    if "run_name" not in config or config["run_name"]=="time":
-        run_name = time.strftime("%Y%m%d-%H%M%S")
-    else:
-        run_name = config["run_name"]
-    dir_path = os.path.abspath(os.getcwd())
-    path = dir_path + f"/logs/trainrun_{run_name}"
-    if not os.path.exists(path):
-        os.makedirs(path)
-    with open(path + '/config.pkl', 'wb') as f:
-        pickle.dump(config, f)    
-    with open(path + '/config.txt', 'w') as f:
-        for k, v in config.items():
-            f.write(str(k) + ' >>> '+ str(v) + '\n\n')
-    epoch_losses = []
-    accs = []
-    class_preds = []
-    mb_results = None
-    try:
-        for epoch in (range(1, epochs + 1) if epochs is not None else itertools.count(1)):
-            epoch_start_time = time.time()
-            if extra_prior_kwargs_dict["hyperparameters"]["multiclass_type"] == "variable_balance":
-                extra_prior_kwargs_dict["hyperparameters"]["epoch_frac"] = (epoch/epochs)**2
-                dl = priordataloader_class(num_steps=steps_per_epoch, batch_size=batch_size, eval_pos_seq_len_sampler=eval_pos_seq_len_sampler, seq_len_maximum=bptt+(bptt_extra_samples if bptt_extra_samples else 0), device=device, **extra_prior_kwargs_dict)
-                dl.model = model
-            total_loss, acc, class_pred, total_positional_losses, time_to_get_batch, forward_time, step_time, nan_share, ignore_share =\
-                train_epoch()
-            epoch_losses.append(total_loss)
-            accs.append(acc)
-            class_preds.append(class_pred)
-            if microbiome_test:
-                with torch.no_grad():
-                    results = mb_test(model, config, device)
-                mb_results = torch.tensor(results.values) if mb_results is None else torch.cat((mb_results, torch.tensor(results.values)), dim=0)
-            if hasattr(dl, 'validate') and epoch % validation_period == 0:
-                with torch.no_grad():
-                    val_score = dl.validate(model)
-            else:
-                val_score = None
-
-            if verbose:
-                print('-' * 89)
-                print(
-                    f'| end of epoch {epoch:3d} | time: {(time.time() - epoch_start_time):5.2f}s | mean loss {total_loss:5.2f} | '
-                    #f"pos losses {','.join([f'{l:5.2f}' for l in total_positional_losses])}, lr {scheduler.get_last_lr()[0]}"
-                    f' mean accuracy {acc:5.4f} | '
-                    f' preds imbalance measure {class_pred:5.2f} | '
-                    f' lr {scheduler.get_last_lr()[0]} | '
-                    f' data time {time_to_get_batch:5.2f} step time {step_time:5.2f}'
-                    f' forward time {forward_time:5.2f}' 
-                    f' nan share {nan_share:5.2f} ignore share (for classification tasks) {ignore_share:5.4f}'
-                    + (f'val score {val_score}' if val_score is not None else ''))
-                print('-' * 89)
-
-            # stepping with wallclock time based scheduler
-            if epoch_callback is not None and rank == 0:
-                epoch_callback(model, epoch / epochs)
-            scheduler.step()
-    except KeyboardInterrupt:
-        pass
-    torch.save(torch.tensor(epoch_losses), path + "/losses")
-    torch.save(torch.tensor(accs), path + "/accuracies")
-    torch.save(torch.tensor(class_preds), path + "/class_preds")
-    torch.save(mb_results, path + "/mb_results")
+    if epochs>0:
+        ### logging
+        if "run_name" not in config or config["run_name"]=="time":
+            run_name = time.strftime("%Y%m%d-%H%M%S")
+        else:
+            run_name = config["run_name"]
+        dir_path = os.path.abspath(os.getcwd())
+        path = dir_path + f"/logs/trainrun_{run_name}"
+        if not os.path.exists(path):
+            os.makedirs(path)
+        with open(path + '/config.pkl', 'wb') as f:
+            pickle.dump(config, f)    
+        with open(path + '/config.txt', 'w') as f:
+            for k, v in config.items():
+                f.write(str(k) + ' >>> '+ str(v) + '\n\n')
+        epoch_losses = []
+        accs = []
+        class_preds = []
+        mb_results = None
+        try:
+            for epoch in (range(1, epochs + 1) if epochs is not None else itertools.count(1)):
+                epoch_start_time = time.time()
+                if extra_prior_kwargs_dict["hyperparameters"]["multiclass_type"] == "variable_balance":
+                    extra_prior_kwargs_dict["hyperparameters"]["epoch_frac"] = (epoch/epochs)**2
+                    dl = priordataloader_class(num_steps=steps_per_epoch, batch_size=batch_size, eval_pos_seq_len_sampler=eval_pos_seq_len_sampler, seq_len_maximum=bptt+(bptt_extra_samples if bptt_extra_samples else 0), device=device, **extra_prior_kwargs_dict)
+                    dl.model = model
+                total_loss, acc, class_pred, total_positional_losses, time_to_get_batch, forward_time, step_time, nan_share, ignore_share =\
+                    train_epoch()
+                epoch_losses.append(total_loss)
+                accs.append(acc)
+                class_preds.append(class_pred)
+                if microbiome_test:
+                    with torch.no_grad():
+                        results = mb_test(model, config, device)
+                    mb_results = torch.tensor(results.values) if mb_results is None else torch.cat((mb_results, torch.tensor(results.values)), dim=0)
+                if hasattr(dl, 'validate') and epoch % validation_period == 0:
+                    with torch.no_grad():
+                        val_score = dl.validate(model)
+                else:
+                    val_score = None
+    
+                if verbose:
+                    print('-' * 89)
+                    print(
+                        f'| end of epoch {epoch:3d} | time: {(time.time() - epoch_start_time):5.2f}s | mean loss {total_loss:5.2f} | '
+                        #f"pos losses {','.join([f'{l:5.2f}' for l in total_positional_losses])}, lr {scheduler.get_last_lr()[0]}"
+                        f' mean accuracy {acc:5.4f} | '
+                        f' preds imbalance measure {class_pred:5.2f} | '
+                        f' lr {scheduler.get_last_lr()[0]} | '
+                        f' data time {time_to_get_batch:5.2f} step time {step_time:5.2f}'
+                        f' forward time {forward_time:5.2f}' 
+                        f' nan share {nan_share:5.2f} ignore share (for classification tasks) {ignore_share:5.4f}'
+                        + (f'val score {val_score}' if val_score is not None else ''))
+                    print('-' * 89)
+    
+                # stepping with wallclock time based scheduler
+                if epoch_callback is not None and rank == 0:
+                    epoch_callback(model, epoch / epochs)
+                scheduler.step()
+        except KeyboardInterrupt:
+            pass
+        torch.save(torch.tensor(epoch_losses), path + "/losses")
+        torch.save(torch.tensor(accs), path + "/accuracies")
+        torch.save(torch.tensor(class_preds), path + "/class_preds")
+        torch.save(mb_results, path + "/mb_results")
     if rank == 0: # trivially true for non-parallel training
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model = model.module
@@ -313,16 +319,17 @@ from scripts.model_builder import save_model
 
 def mb_test(model, config, device, datapath="datasets/data_all.csv"):
     names = ["no sampling", "undersampling"]
+    seed=42
     for ii, sampling in enumerate([None, undersample]):
         print("MB test with ", names[ii])
         pred_model = TabPFNClassifier(model, config, device=device, no_preprocess_mode=False)
         data, labels = get_microbiome(datapath)
         data = top_non_zero(data)
-        data, labels = unison_shuffled_copies(data, labels)
+        data, labels = unison_shuffled_copies(data, labels, seed=seed)
         metrics = ["accuracy", "precision", "recall", "roc_auc"]
         results = pd.DataFrame(np.zeros((1, len(metrics)+1)), index=["Micriobiome TabPFN"], columns=metrics+["runtime"])
-        results[:] = cross_validate_sample(pred_model, data, labels, metrics, strat_split=True, cv=3, sampling=sampling, max_samples=1000)
-        X_train, X_test, y_train, y_test = train_test_split(data, labels, train_size=1000, test_size=200, random_state=42)
+        results[:] = cross_validate_sample(pred_model, data, labels, metrics, strat_split=True, cv=3, sampling=sampling, max_samples=None, seed=seed)
+        X_train, X_test, y_train, y_test = train_test_split(data, labels, train_size=1000, test_size=200, random_state=seed)
         if sampling: X_train, y_train = sampling(X_train, y_train)
         X_train, y_train = unison_shuffled_copies(X_train, y_train)
         pred_model.fit(X_train, y_train)

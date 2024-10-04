@@ -43,8 +43,8 @@ def top_non_zero(data, reduced_length=100):
     return data[:,indices[:reduced_length]]
 
 # applies same shuffle to two array with the same shape in first dimension
-def unison_shuffled_copies(a, b):
-    p = np.random.permutation(a.shape[0])
+def unison_shuffled_copies(a, b, seed=42):
+    p = np.random.default_rng(seed=seed).permutation(a.shape[0])
     return a[p], b[p]
 
 # TabPFN friendly train test split

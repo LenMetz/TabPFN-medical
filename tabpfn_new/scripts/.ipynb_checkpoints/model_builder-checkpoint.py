@@ -103,9 +103,9 @@ def load_model(path, filename, device, eval_positions, verbose):
     config_sample['batch_size_in_training'] = config_sample['batch_size']
     config_sample['batch_size'] = 1
     config_sample['bptt_in_training'] = config_sample['bptt']
-    config_sample['bptt'] = 10
+    #config_sample['bptt'] = 10
     config_sample['bptt_extra_samples_in_training'] = config_sample['bptt_extra_samples']
-    config_sample['bptt_extra_samples'] = None
+    #config_sample['bptt_extra_samples'] = None
 
     #print('Memory', str(get_gpu_memory()))
 

@@ -8,7 +8,7 @@ def scores(y_test, y_pred):
     return accuracy_score(y_test, y_pred), precision_score(y_test, y_pred), roc_auc_score(y_test, y_pred)
 
 # return cv folds preserving original class distribution
-def stratified_split(data, labels, cv=3, max_samples=None):
+def stratified_split(data, labels, cv=3, max_samples=None, seed=42):
     if max_samples is None:
         size = labels.shape[0]
     else:
@@ -19,8 +19,8 @@ def stratified_split(data, labels, cv=3, max_samples=None):
     c1_size = np.floor(fold_size*counts[1][1]/labels.shape[0]).astype(int)#fold_size-c0_size
     c0_data = data[labels==0]
     c1_data = data[labels==1]
-    np.random.shuffle(c0_data)
-    np.random.shuffle(c1_data)
+    np.random.default_rng(seed=seed).shuffle(c0_data)
+    np.random.default_rng(seed=seed).shuffle(c1_data)
     
     data_folds, labels_folds = [], []
     for f in range(cv):
@@ -32,9 +32,9 @@ def stratified_split(data, labels, cv=3, max_samples=None):
         
     return data_folds, labels_folds
 
-def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling=None, max_samples=None):
+def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling=None, max_samples=None, seed=42):
     if strat_split:
-        X_folds, y_folds = stratified_split(X, y, cv, max_samples)
+        X_folds, y_folds = stratified_split(X, y, cv, max_samples,seed=seed)
     else:
         X_folds, y_folds = np.array_split(X, cv), np.array_split(y, cv)
     results = np.zeros((len(metrics)+1))
@@ -45,7 +45,7 @@ def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling
         X_train, y_train = np.concatenate(tuple(X_folds[:-1])), np.concatenate(tuple(y_folds[:-1]))
         X_test, y_test = X_folds[-1], y_folds[-1]
         if sampling: X_train, y_train = sampling(X_train, y_train)
-        X_train, y_train = unison_shuffled_copies(X_train, y_train)
+        X_train, y_train = unison_shuffled_copies(X_train, y_train,seed=seed)
         start_time = time.time()
         if model_clean.__class__.__name__=="TabPFNClassifier":
             model_clean.fit(X_train, y_train, overwrite_warning=True)

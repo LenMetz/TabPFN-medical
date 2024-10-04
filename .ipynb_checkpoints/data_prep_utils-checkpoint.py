@@ -12,7 +12,6 @@ def oversample(X, y):
     new_samples = X_min[indices]
     X_new = np.concatenate((X, new_samples), axis=0)
     y_new = np.concatenate((y, np.full(n_new_samples, min_class)))
-    print(X_new.shape, y_new.shape)
     return X_new, y_new
 
 # method to fix class imbalance by removing random samples from more frequent class
@@ -44,8 +43,8 @@ def top_non_zero(data, reduced_length=100):
     return data[:,indices[:reduced_length]]
 
 # applies same shuffle to two array with the same shape in first dimension
-def unison_shuffled_copies(a, b):
-    p = np.random.permutation(a.shape[0])
+def unison_shuffled_copies(a, b, seed=42):
+    p = np.random.default_rng(seed=seed).permutation(a.shape[0])
     return a[p], b[p]
 
 # TabPFN friendly train test split
