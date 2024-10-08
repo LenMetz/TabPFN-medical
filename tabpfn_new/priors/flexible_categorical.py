@@ -34,7 +34,7 @@ class VariableImbalancedBinarize(nn.Module):
     def forward(self, x):
         std = torch.std(x,dim=0)
         med = torch.median(x,dim=0)[0]
-        split = med + self.epoch_frac*torch.normal(0, std)
+        split = med + self.epoch_frac*torch.normal(0, 1,(1,))*std
         return (x > split).float()
         
 class ImbalancedBinarize(nn.Module):
@@ -294,7 +294,7 @@ class FlexibleCategorical(torch.nn.Module):
             print('Nans in target!')
 
         if self.h['check_is_compatible']:
-            '''for b in range(y.shape[1]):
+            for b in range(y.shape[1]):
                 is_compatible, N = False, 0
                 while not is_compatible and N < 10:
                     targets_in_train = torch.unique(y[:self.args['single_eval_pos'], b], sorted=True)
@@ -310,9 +310,9 @@ class FlexibleCategorical(torch.nn.Module):
                 if not is_compatible:
                     if not is_compatible:
                         # todo check that it really does this and how many together
-                        y[:, b] = -100 # Relies on CE having `ignore_index` set to -100 (default)'''
+                        y[:, b] = -100 # Relies on CE having `ignore_index` set to -100 (default)
 
-        if self.h['normalize_labels']:
+        '''if self.h['normalize_labels']:
             #assert self.h['output_multiclass_ordered_p'] == 0., "normalize_labels destroys ordering of labels anyways."
             for b in range(y.shape[1]):
                 valid_labels = y[:,b] != -100
@@ -325,7 +325,7 @@ class FlexibleCategorical(torch.nn.Module):
                     num_classes = num_classes_float.int().item()
                     assert num_classes == num_classes_float.item()
                     random_shift = torch.randint(0, num_classes, (1,), device=self.args['device'])
-                    y[valid_labels, b] = (y[valid_labels, b] + random_shift) % num_classes
+                    y[valid_labels, b] = (y[valid_labels, b] + random_shift) % num_classes'''
 
         return x, y, y  # x.shape = (T,B,H)
 

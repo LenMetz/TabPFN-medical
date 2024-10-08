@@ -37,18 +37,28 @@ class Losses():
 
 # stratified split, such that the class distribution is roughly equal in train and test (before/after split point)
 def balance_split(data, targets, pos):
-    print(targets.shape)
+    #print(data.shape, targets.shape)
     #pos = max(min(data.shape[0]-2**targets.shape[-1]-1, pos), 2**targets.shape[-1])
-    '''for i in range(targets.shape[-1]):
-        print(torch.unique(targets[:,i], return_counts=True))'''
-    sss = StratifiedShuffleSplit(n_splits=1, test_size = data.shape[0]-pos)
-    sss.get_n_splits(data,targets)
-    
-    train_index, test_index= next(sss.split(data,targets))
-    X_train, y_train, X_test, y_test = data[train_index], targets[train_index], data[test_index], targets[test_index]
-
-    X = torch.cat((X_train,X_test), dim=0)
-    y = torch.cat((y_train,y_test), dim=0)
+    new_X, new_y = [], []
+    for i in range(targets.shape[1]):
+        #print(torch.unique(targets[:,1], return_counts=True))
+        data_b, targets_b = data[:,i,:].cpu(), targets[:,i].cpu()
+        if len(torch.unique(targets_b, return_counts=True)[1])>1:
+            sss = StratifiedShuffleSplit(n_splits=1, test_size = data.shape[0]-pos)
+            sss.get_n_splits(data_b,targets_b)
+            
+            train_index, test_index= next(sss.split(data_b,targets_b))
+            X_train, y_train, X_test, y_test = data_b[train_index], targets_b[train_index], data_b[test_index], targets_b[test_index]
+        
+            X = torch.unsqueeze(torch.cat((X_train,X_test), dim=0), dim=1)
+            y = torch.unsqueeze(torch.cat((y_train,y_test), dim=0), dim=1)
+            new_X.append(X)
+            new_y.append(y)
+        else:
+            new_X.append(data_b)
+            new_y.append(targets_b)
+    X = torch.cat((*new_X,), dim=1).to(data.get_device())
+    y = torch.cat((*new_y,), dim=1).to(data.get_device())
     return X, y
 
 
@@ -148,8 +158,8 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     single_eval_pos = targets.shape[0] - bptt_extra_samples
                 #print(targets.shape, data[1].shape)
                 # If style is set to None, it should not be transferred to device
-                #new_data, targets = balance_split(data[1], targets, single_eval_pos)
-                #data = (data[0], new_data, targets)
+                new_data, targets = balance_split(data[1], targets, single_eval_pos)
+                data = (data[0], new_data, targets)
                 output = model(tuple(e.to(device) if torch.is_tensor(e) else e for e in data) if isinstance(data, tuple) else data.to(device)
                                , single_eval_pos=single_eval_pos)
 
@@ -168,13 +178,13 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 elif isinstance(criterion, nn.CrossEntropyLoss):
                     if config["weight_classes"]:
                         #weights = (torch.unique(all_targets, return_counts=True)[1]*2/torch.unique(all_targets, return_counts=True)[1]).flip(dims=(0,)).to(device)
-                        weights = (torch.unique(all_targets, return_counts=True)[1]*2/torch.sum(torch.unique(all_targets, return_counts=True)[1])).to(device)
+                        weights = (torch.unique(all_targets, return_counts=True)[1]/torch.sum(torch.unique(all_targets, return_counts=True)[1])).flip(dims=(0,)).to(device)
                         #print(weights)
                         #print(torch.unique(targets, return_counts=True)[1][-1]/targets.shape[0])
                         if len(weights)<2:
                             weights = torch.tensor([1,1]).to(device)
                         #weights = torch.nn.functional.softmax(weights.float(), dim=-1)*2
-                        
+                        weights = torch.sqrt(weights*2)
                         criterion_new = Losses.ce_weighted(n_out,weights)
                         losses = criterion_new(output.reshape(-1, n_out), targets.to(device).long().flatten())
                     else:
@@ -201,7 +211,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                     print("\n\n% Positive predictions:")
                     for elem in (class_pred): print(f"{elem:2.3f}  ", end='') 
                     print("\n% Positive targets:")
-                    for elem in (torch.sum(targets, dim=0)/output.shape[0]): print(f"{elem:2.3f}  ", end='') 
+                    for elem in (torch.sum(targets, dim=0)/targets.shape[0]): print(f"{elem:2.3f}  ", end='') 
                     print(f"\nTrain sample accuracy: {accuracy.item():2.3f}")
                     if scaler: scaler.unscale_(optimizer)
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
@@ -318,9 +328,9 @@ from scripts.transformer_prediction_interface import TabPFNClassifier
 from scripts.model_builder import save_model
 
 def mb_test(model, config, device, datapath="datasets/data_all.csv"):
-    names = ["no sampling", "undersampling"]
+    names = ["undersampling", "no_sampling"]
     seed=42
-    for ii, sampling in enumerate([None, undersample]):
+    for ii, sampling in enumerate([undersample, None]):
         print("MB test with ", names[ii])
         pred_model = TabPFNClassifier(model, config, device=device, no_preprocess_mode=False)
         data, labels = get_microbiome(datapath)
