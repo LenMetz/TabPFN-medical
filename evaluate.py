@@ -3,6 +3,7 @@ import numpy as np
 import sklearn
 from data_prep_utils import *
 import time
+import torch
 
 def scores(y_test, y_pred):
     return accuracy_score(y_test, y_pred), precision_score(y_test, y_pred), roc_auc_score(y_test, y_pred)
@@ -47,11 +48,12 @@ def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling
         if sampling: X_train, y_train = sampling(X_train, y_train)
         X_train, y_train = unison_shuffled_copies(X_train, y_train,seed=seed)
         start_time = time.time()
-        if model_clean.__class__.__name__=="TabPFNClassifier":
+        if model_clean.__class__.__name__=="TabPFNClassifier" or  model_clean.__class__.__name__=="MedPFNClassifier":
             model_clean.fit(X_train, y_train, overwrite_warning=True)
         else:
             model_clean.fit(X_train, y_train)
-        preds = model_clean.predict(X_test)
+        with torch.no_grad():
+            preds = model_clean.predict(X_test)
         results[len(metrics)] += time.time() - start_time
         for i, m in enumerate(metrics):
             if m == "roc_auc_ovr":

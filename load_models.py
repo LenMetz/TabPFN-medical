@@ -11,6 +11,7 @@ from tabularbench.core.trainer_finetune import TrainerFinetune
 from tabularbench.models.foundation.foundation_transformer import FoundationTransformer
 import xgboost as xgb
 from xgboost import XGBClassifier
+import catboost as cb
 import optuna
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -62,6 +63,60 @@ class TabForestPFNClassifier(BaseEstimator, ClassifierMixin):
         logits = self.trainer.predict(self.X_, self.y_, X)
         return np.exp(logits) / np.exp(logits).sum(axis=1)[:, None]
 
+class CatBoostOptim(BaseEstimator, ClassifierMixin):
+    
+    def __init__(self, X=None, y=None, n_optim=10):
+        super().__init__()
+        self.X = X
+        self.y = y
+        self.n_optim=n_optim
+        self.model = cb.CatBoostClassifier()
+
+    def fit(self, X, y):
+        self.X = X
+        self.y = y
+        def objective(trial):
+            X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=0.25)
+            #train = xgb.DMatrix(train_x, label=train_y)
+            #dvalid = xgb.DMatrix(valid_x, label=valid_y)
+        
+            param = {
+                "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.01, 0.1),
+                "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.1, log=True),
+                "depth": trial.suggest_int("depth", 1, 10),
+                
+                "subsample": trial.suggest_float("subsample", 0.05, 1.0),
+                "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.05, 1.0),
+                "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 1, 100),
+                '''"boosting_type": trial.suggest_categorical("boosting_type", ["Ordered", "Plain"]),
+                "bootstrap_type": trial.suggest_categorical(
+                    "bootstrap_type", ["Bayesian", "Bernoulli", "MVS"]
+                ),'''
+                "used_ram_limit": "3gb",
+            }
+        
+            if param["bootstrap_type"] == "Bayesian":
+                param["bagging_temperature"] = trial.suggest_float("bagging_temperature", 0, 10)
+            elif param["bootstrap_type"] == "Bernoulli":
+                param["subsample"] = trial.suggest_float("subsample", 0.1, 1)
+        
+            model = cb.CatBoostClassifier(**param)
+            model.fit(X_train, y_train, verbose=0)
+            preds = model.predict(X_test)
+            roc_auc = sklearn.metrics.roc_auc_score(y_test, preds)
+            return roc_auc
+            
+        study = optuna.create_study(direction="maximize")
+        study.optimize(objective, n_trials=self.n_optim, timeout=600)
+        self.model = cb.CatBoostClassifier(**study.best_params)
+        self.model.fit(self.X,self.y)
+    
+    def predict(self, X):
+        return self.model.predict(X)
+    
+    def predict_proba(self, X):
+        return self.model.predict_proba(X)
+
 class XGBoostOptim(BaseEstimator, ClassifierMixin):
     
     def __init__(self, X=None, y=None, n_optim=10):
@@ -75,7 +130,7 @@ class XGBoostOptim(BaseEstimator, ClassifierMixin):
         self.X = X
         self.y = y
         def objective(trial):
-            X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=0.25)
+            X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=0.25, stratify=self.y)
             #train = xgb.DMatrix(train_x, label=train_y)
             #dvalid = xgb.DMatrix(valid_x, label=valid_y)
         

@@ -17,7 +17,7 @@ from sklearn.utils.multiclass import check_classification_targets
 from sklearn.utils import column_or_1d
 from sklearn.preprocessing import LabelEncoder
 from pathlib import Path
-from tabpfn.scripts.model_builder import load_model, load_model_only_inference
+from tabpfn_new.scripts.model_builder import load_model, load_model_only_inference
 import os
 import pickle
 import io
@@ -102,6 +102,8 @@ def load_model_workflow(i, e, add_name, base_path, device='cpu', eval_addition='
     return model, c, results_file
 
 
+
+    
 class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     models_in_memory = {}
@@ -555,6 +557,63 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
     output = torch.transpose(output, 0, 1)
 
     return output
+
+class MedPFNClassifier(TabPFNClassifier):
+    def __init__(self, model_par=None, c=None, device='cpu', base_path=None, filename=None,
+                 N_ensemble_configurations=3, no_preprocess_mode=False, multiclass_decoder='permutation',
+                 feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32,
+                 subsample_features=False):
+
+        model, config = load_model(base_path, filename, device="cpu", eval_positions=None, verbose=False)
+        self.device = device
+        self.model_par = model_par
+        self.model = model
+        self.pred_model = TabPFNClassifier(model[2], config, device="cpu", N_ensemble_configurations=N_ensemble_configurations, no_preprocess_mode=False)
+        self.c = c
+        self.config = config
+        self.style = None
+        self.temperature = None
+        self.N_ensemble_configurations = N_ensemble_configurations
+        self.base__path = base_path
+        self.base_path = base_path
+        self.filename = filename
+        #self.i = i
+        #self.model_string = model_string
+
+        self.max_num_features = self.config['num_features']
+        self.max_num_classes = self.config['max_num_classes']
+        self.differentiable_hps_as_style = self.config['differentiable_hps_as_style']
+
+        self.no_preprocess_mode = no_preprocess_mode
+        self.feature_shift_decoder = feature_shift_decoder
+        self.multiclass_decoder = multiclass_decoder
+        self.only_inference = only_inference
+        self.seed = seed
+        self.no_grad = no_grad
+        self.subsample_features = subsample_features
+
+        assert self.no_preprocess_mode if not self.no_grad else True, \
+            "If no_grad is false, no_preprocess_mode must be true, because otherwise no gradient can be computed."
+
+        self.batch_size_inference = batch_size_inference
+
+    def remove_models_from_memory(self):
+        return self.pred_model.remove_models_from_memory()
+
+    def load_result_minimal(self, path, i, e):
+        return self.pred_model._validate_targets(path, i, e)
+
+    def _validate_targets(self, y):
+        return self.pred_model._validate_targets(y)
+
+    def fit(self, X, y, overwrite_warning=False):
+        return self.pred_model.fit(X, y, overwrite_warning)
+
+    def predict_proba(self, X, normalize_with_test=False, return_logits=False):
+        return self.pred_model.predict_proba(X, normalize_with_test, return_logits)
+
+    def predict(self, X, return_winning_probability=False, normalize_with_test=False):
+        return self.pred_model.predict(X, return_winning_probability, normalize_with_test)
 
 def get_params_from_config(c):
     return {'max_features': c['num_features']

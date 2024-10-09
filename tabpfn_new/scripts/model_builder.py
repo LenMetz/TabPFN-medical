@@ -43,7 +43,7 @@ def load_model_only_inference(path, filename, device):
     cannot be used for further training.
     """
 
-    model_state, optimizer_state, config_sample = torch.load(os.path.join(path, filename), map_location='cpu')
+    model_state, optimizer_state, config_sample = torch.load(os.path.join(path, filename), map_location='cpu', weights_only=False)
 
     if (('nan_prob_no_reason' in config_sample and config_sample['nan_prob_no_reason'] > 0.0) or
         ('nan_prob_a_reason' in config_sample and config_sample['nan_prob_a_reason'] > 0.0) or
@@ -83,9 +83,10 @@ def load_model_only_inference(path, filename, device):
 def load_model(path, filename, device, eval_positions, verbose):
     # TODO: This function only restores evaluation functionality but training canät be continued. It is also not flexible.
     # print('Loading....')
-    print('!! Warning: GPyTorch must be installed !!')
+    if verbose:
+        print('!! Warning: GPyTorch must be installed !!')
     model_state, optimizer_state, config_sample = torch.load(
-        os.path.join(path, filename), map_location='cpu')
+        os.path.join(path, filename), map_location='cpu', weights_only=False)
     if ('differentiable_hyperparameters' in config_sample
             and 'prior_mlp_activations' in config_sample['differentiable_hyperparameters']):
         config_sample['differentiable_hyperparameters']['prior_mlp_activations']['choice_values_used'] = config_sample[
