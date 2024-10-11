@@ -55,10 +55,10 @@ def balance_split(data, targets, pos):
             new_X.append(X)
             new_y.append(y)
         else:
-            new_X.append(data_b)
-            new_y.append(targets_b)
-    X = torch.cat((*new_X,), dim=1).to(data.get_device())
-    y = torch.cat((*new_y,), dim=1).to(data.get_device())
+            new_X.append(torch.unsqueeze(data_b, dim=1))
+            new_y.append(torch.unsqueeze(targets_b, dim=1))
+    X = torch.cat((*new_X,), dim=1).to(data.device)
+    y = torch.cat((*new_y,), dim=1).to(data.device)
     return X, y
 
 
@@ -181,10 +181,10 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                         weights = (torch.unique(all_targets, return_counts=True)[1]/torch.sum(torch.unique(all_targets, return_counts=True)[1])).flip(dims=(0,)).to(device)
                         #print(weights)
                         #print(torch.unique(targets, return_counts=True)[1][-1]/targets.shape[0])
-                        if len(weights)<2:
+                        if len(weights)!=2:
                             weights = torch.tensor([1,1]).to(device)
                         #weights = torch.nn.functional.softmax(weights.float(), dim=-1)*2
-                        weights = torch.sqrt(weights*2)
+                        weights = weights+0.5
                         criterion_new = Losses.ce_weighted(n_out,weights)
                         losses = criterion_new(output.reshape(-1, n_out), targets.to(device).long().flatten())
                     else:
@@ -204,7 +204,8 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                 accuracy = torch.mean((preds==targets)[targets!=-100].float())
                 accs.append(accuracy)
                 class_pred = torch.sum(preds, dim=0)/output.shape[0]
-                class_pred_measure.append(torch.mean((class_pred-0.5)**2))
+                class_tgt = torch.sum(targets, dim=0)/output.shape[0]
+                class_pred_measure.append(torch.mean((class_pred-class_tgt)*torch.sign(class_tgt-0.5)))
                 if batch % aggregate_k_gradients == aggregate_k_gradients - 1:                            
                     #print(torch.unique(targets))
                     #print("\nLast output: ", output[:10])

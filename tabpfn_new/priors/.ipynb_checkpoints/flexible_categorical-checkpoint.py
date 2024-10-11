@@ -37,6 +37,17 @@ class VariableImbalancedBinarize(nn.Module):
         split = med + self.epoch_frac*torch.normal(0, 1,(1,))*std
         return (x > split).float()
         
+class StaticImbalancedBinarize(nn.Module):
+    def __init__(self, frac):
+        super().__init__()
+        self.frac = frac
+        
+    def forward(self, x):
+        std = torch.std(x,dim=0)
+        med = torch.median(x,dim=0)[0]
+        split = med + self.frac*torch.normal(0, 1,(1,))*std
+        return (x > split).float()
+        
 class ImbalancedBinarize(nn.Module):
     def __init__(self):
         super().__init__()
@@ -194,6 +205,8 @@ class FlexibleCategorical(torch.nn.Module):
                     self.class_assigner = ForceBalancedBinarize()
                 elif self.h['multiclass_type'] == "variable_balance":
                     self.class_assigner = VariableImbalancedBinarize(self.h["epoch_frac"])
+                elif self.h['multiclass_type'] == "static_balance":
+                    self.class_assigner = StaticImbalancedBinarize(self.h["frac"])
                 else:
                     raise ValueError("Unknow Multiclass type")
 
@@ -294,7 +307,7 @@ class FlexibleCategorical(torch.nn.Module):
             print('Nans in target!')
 
         if self.h['check_is_compatible']:
-            '''for b in range(y.shape[1]):
+            for b in range(y.shape[1]):
                 is_compatible, N = False, 0
                 while not is_compatible and N < 10:
                     targets_in_train = torch.unique(y[:self.args['single_eval_pos'], b], sorted=True)
@@ -310,7 +323,7 @@ class FlexibleCategorical(torch.nn.Module):
                 if not is_compatible:
                     if not is_compatible:
                         # todo check that it really does this and how many together
-                        y[:, b] = -100 # Relies on CE having `ignore_index` set to -100 (default)'''
+                        y[:, b] = -100 # Relies on CE having `ignore_index` set to -100 (default)
 
         '''if self.h['normalize_labels']:
             #assert self.h['output_multiclass_ordered_p'] == 0., "normalize_labels destroys ordering of labels anyways."

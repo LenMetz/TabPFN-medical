@@ -33,12 +33,12 @@ def stratified_split(data, labels, cv=3, max_samples=None, seed=42):
         
     return data_folds, labels_folds
 
-def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling=None, max_samples=None, seed=42):
+def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling=None, max_samples=None, seed=42, overwrite=True):
     if strat_split:
         X_folds, y_folds = stratified_split(X, y, cv, max_samples,seed=seed)
     else:
         X_folds, y_folds = np.array_split(X, cv), np.array_split(y, cv)
-    results = np.zeros((len(metrics)+1))
+    results = [[] for _ in range(len(metrics)+1)]
     for run in range(cv):
         model_clean = sklearn.base.clone(model)
         X_folds = X_folds[-run:] + X_folds[:-run]
@@ -49,17 +49,22 @@ def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling
         X_train, y_train = unison_shuffled_copies(X_train, y_train,seed=seed)
         start_time = time.time()
         if model_clean.__class__.__name__=="TabPFNClassifier" or  model_clean.__class__.__name__=="MedPFNClassifier":
-            model_clean.fit(X_train, y_train, overwrite_warning=True)
+            if overwrite:
+                model_clean.fit(X_train, y_train, overwrite_warning=True)
+            else:
+                reduce_n_samples(X_train, y_train, 1024)
         else:
             model_clean.fit(X_train, y_train)
         with torch.no_grad():
             preds = model_clean.predict(X_test)
-        results[len(metrics)] += time.time() - start_time
+        results[-1].append(time.time() - start_time)
         for i, m in enumerate(metrics):
             if m == "roc_auc_ovr":
                 results[i] += sklearn.metrics.roc_auc_score(y_test, preds, multi_class="ovr")
             else:
-                results[i] += sklearn.metrics.get_scorer(m)._score_func(y_test, preds)
-    results = results/cv
-    return results
+                results[i].append(sklearn.metrics.get_scorer(m)._score_func(y_test, preds))
+        #print(results)
+    results_mean = np.mean(np.array(results), axis=1)
+    results_std = np.std(np.array(results), axis=1)
+    return results_mean, results_std
         

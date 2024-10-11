@@ -81,17 +81,17 @@ class CatBoostOptim(BaseEstimator, ClassifierMixin):
             #dvalid = xgb.DMatrix(valid_x, label=valid_y)
         
             param = {
-                "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.01, 0.1),
+                #"colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.01, 0.1),
                 "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.1, log=True),
                 "depth": trial.suggest_int("depth", 1, 10),
                 
                 "subsample": trial.suggest_float("subsample", 0.05, 1.0),
                 "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.05, 1.0),
                 "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 1, 100),
-                '''"boosting_type": trial.suggest_categorical("boosting_type", ["Ordered", "Plain"]),
+                "boosting_type": trial.suggest_categorical("boosting_type", ["Ordered", "Plain"]),
                 "bootstrap_type": trial.suggest_categorical(
                     "bootstrap_type", ["Bayesian", "Bernoulli", "MVS"]
-                ),'''
+                ),
                 "used_ram_limit": "3gb",
             }
         

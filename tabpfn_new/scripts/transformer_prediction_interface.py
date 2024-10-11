@@ -9,6 +9,7 @@ from tabpfn.utils import NOP, normalize_by_used_features_f
 
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer, RobustScaler
 
+from sklearn.model_selection import train_test_split, StratifiedShuffleSplit
 import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
@@ -464,17 +465,17 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
         if i == 1:
             return 'none'
 
-    preprocess_transform_configurations = ['none', 'power_all'] if preprocess_transform == 'mix' else [preprocess_transform]
+    preprocess_transform_configurations = ['power_all'] if preprocess_transform == 'mix' else [preprocess_transform]
 
     if seed is not None:
         torch.manual_seed(seed)
 
     feature_shift_configurations = torch.randperm(eval_xs.shape[2]) if feature_shift_decoder else [0]
-    class_shift_configurations = torch.randperm(len(torch.unique(eval_ys))) if multiclass_decoder == 'permutation' else [0]
+    class_shift_configurations = torch.randperm(len(torch.unique(eval_ys))) if multiclass_decoder == 'permutation' else [1]
 
     ensemble_configurations = list(itertools.product(class_shift_configurations, feature_shift_configurations))
     #default_ensemble_config = ensemble_configurations[0]
-
+    
     rng = random.Random(seed)
     rng.shuffle(ensemble_configurations)
     ensemble_configurations = list(itertools.product(ensemble_configurations, preprocess_transform_configurations, styles_configurations))
@@ -488,6 +489,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
     inputs, labels = [], []
     start = time.time()
     for ensemble_configuration in ensemble_configurations:
+        #print(ensemble_configuration)
         (class_shift_configuration, feature_shift_configuration), preprocess_transform_configuration, styles_configuration = ensemble_configuration
 
         style_ = style[styles_configuration:styles_configuration+1, :] if style is not None else style
@@ -560,7 +562,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
 
 class MedPFNClassifier(TabPFNClassifier):
     def __init__(self, model_par=None, c=None, device='cpu', base_path=None, filename=None,
-                 N_ensemble_configurations=3, no_preprocess_mode=False, multiclass_decoder='permutation',
+                 N_ensemble_configurations=3, ft_epochs=0, ft_lr=1e-5, max_s=1024, max_q=256, no_preprocess_mode=False, multiclass_decoder='permutation',
                  feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32,
                  subsample_features=False):
 
@@ -568,8 +570,13 @@ class MedPFNClassifier(TabPFNClassifier):
         self.device = device
         self.model_par = model_par
         self.model = model
-        self.pred_model = TabPFNClassifier(model[2], config, device="cpu", N_ensemble_configurations=N_ensemble_configurations, no_preprocess_mode=False)
+        self.pred_model = TabPFNClassifier(model[2], config, device="cpu", N_ensemble_configurations=N_ensemble_configurations, 
+                                           multiclass_decoder=multiclass_decoder, no_preprocess_mode=no_preprocess_mode)
         self.c = c
+        self.ft_epochs = ft_epochs
+        self.ft_lr = ft_lr
+        self.max_s = max_s
+        self.max_q = max_q
         self.config = config
         self.style = None
         self.temperature = None
@@ -605,8 +612,32 @@ class MedPFNClassifier(TabPFNClassifier):
 
     def _validate_targets(self, y):
         return self.pred_model._validate_targets(y)
-
+        
+    
+    def finetune(self,X,y, max_sup=1024, max_que=128):
+        y = -y + 1
+        self.pred_model.model[2].train()
+        optimizer = torch.optim.AdamW(self.pred_model.model[2].parameters(), lr=self.ft_lr)
+        criterion = torch.nn.CrossEntropyLoss()
+        total_len = min(X.shape[0], max_sup+max_que)
+        pos = min(int(X.shape[0]*0.8), max_sup)
+        for e in range(self.ft_epochs):
+            p = np.random.default_rng().permutation(y.shape[0])
+            X_new, y_new = torch.tensor(X[p]).float()[:total_len], torch.tensor(y[p]).float()[:total_len]
+            X_new, y_new = balance_split(X_new, y_new, pos)
+            X_new = normalize_data(X_new)
+            src = (0,X_new,y_new)
+            output = self.pred_model.model[2](src, single_eval_pos=pos)
+            targets = y_new[pos:]
+            loss = criterion(output, targets.long())
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+        self.pred_model.model[2].eval()
+        
     def fit(self, X, y, overwrite_warning=False):
+        if self.ft_epochs>0:
+            self.finetune(X,y,self.max_s,self.max_q)
         return self.pred_model.fit(X, y, overwrite_warning)
 
     def predict_proba(self, X, normalize_with_test=False, return_logits=False):
@@ -615,6 +646,25 @@ class MedPFNClassifier(TabPFNClassifier):
     def predict(self, X, return_winning_probability=False, normalize_with_test=False):
         return self.pred_model.predict(X, return_winning_probability, normalize_with_test)
 
+
+# stratified split, such that the class distribution is roughly equal in train and test (before/after split point)
+def balance_split(data, targets, pos):
+    #print(data.shape, targets.shape)
+    #pos = max(min(data.shape[0]-2**targets.shape[-1]-1, pos), 2**targets.shape[-1])
+    #print(torch.unique(targets[:,1], return_counts=True))
+    if len(torch.unique(targets, return_counts=True)[1])>1:
+        sss = StratifiedShuffleSplit(n_splits=1, test_size = data.shape[0]-pos)
+        sss.get_n_splits(data,targets)
+        
+        train_index, test_index= next(sss.split(data,targets))
+        X_train, y_train, X_test, y_test = data[train_index], targets[train_index], data[test_index], targets[test_index]
+    
+        X = torch.cat((X_train,X_test), dim=0)
+        y = torch.cat((y_train,y_test), dim=0)
+        return X, y
+    else:
+        return data, targets
+        
 def get_params_from_config(c):
     return {'max_features': c['num_features']
         , 'rescale_features': c["normalize_by_used_features"]
