@@ -52,7 +52,8 @@ def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling
             if overwrite:
                 model_clean.fit(X_train, y_train, overwrite_warning=True)
             else:
-                reduce_n_samples(X_train, y_train, 1024)
+                X_train, y_train = reduce_n_samples(X_train, y_train, 1024)
+                model_clean.fit(X_train, y_train, overwrite_warning=True)
         else:
             model_clean.fit(X_train, y_train)
         with torch.no_grad():

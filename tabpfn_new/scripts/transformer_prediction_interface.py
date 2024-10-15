@@ -615,10 +615,11 @@ class MedPFNClassifier(TabPFNClassifier):
         
     
     def finetune(self,X,y, max_sup=1024, max_que=128):
-        y = -y + 1
+        counts = torch.unique(torch.tensor(y), return_counts=True)[1]
+        weights = (counts/torch.sum(counts)).flip(dims=(0,))
         self.pred_model.model[2].train()
         optimizer = torch.optim.AdamW(self.pred_model.model[2].parameters(), lr=self.ft_lr)
-        criterion = torch.nn.CrossEntropyLoss()
+        criterion = torch.nn.CrossEntropyLoss(weight=weights)
         total_len = min(X.shape[0], max_sup+max_que)
         pos = min(int(X.shape[0]*0.8), max_sup)
         for e in range(self.ft_epochs):

@@ -321,12 +321,13 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
 
 import os
 import sys
+#print(os.path.dirname(os.path.abspath(__file__)))
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_dir)
 from data_prep_utils import *
 from evaluate import *
-from scripts.transformer_prediction_interface import TabPFNClassifier
-from scripts.model_builder import save_model
+from tabpfn_new.scripts.transformer_prediction_interface import TabPFNClassifier
+from tabpfn_new.scripts.model_builder import save_model
 
 def mb_test(model, config, device, datapath="datasets/data_all.csv"):
     names = ["undersampling", "no_sampling"]
