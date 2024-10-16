@@ -184,7 +184,8 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
                         if len(weights)!=2:
                             weights = torch.tensor([1,1]).to(device)
                         #weights = torch.nn.functional.softmax(weights.float(), dim=-1)*2
-                        weights = weights+0.5
+                        #weights = weights+0.5
+                        weights = weights*2
                         criterion_new = Losses.ce_weighted(n_out,weights)
                         losses = criterion_new(output.reshape(-1, n_out), targets.to(device).long().flatten())
                     else:
@@ -329,25 +330,23 @@ from evaluate import *
 from tabpfn_new.scripts.transformer_prediction_interface import TabPFNClassifier
 from tabpfn_new.scripts.model_builder import save_model
 
-def mb_test(model, config, device, datapath="datasets/data_all.csv"):
-    names = ["undersampling", "no_sampling"]
+mb_data, mb_labels = get_microbiome(path="datasets/data_all.csv")
+mb_data = remove_zero_features(mb_data)
+mb_data = top_anova(mb_data, mb_labels)
+mb_data, mb_labels = unison_shuffled_copies(mb_data, mb_labels, seed=42)
+def mb_test(model, config, device):
     seed=42
-    for ii, sampling in enumerate([undersample, None]):
-        print("MB test with ", names[ii])
-        pred_model = TabPFNClassifier(model, config, device=device, no_preprocess_mode=False)
-        data, labels = get_microbiome(datapath)
-        data = top_non_zero(data)
-        data, labels = unison_shuffled_copies(data, labels, seed=seed)
-        metrics = ["accuracy", "precision", "recall", "roc_auc"]
-        results = pd.DataFrame(np.zeros((1, len(metrics)+1)), index=["Micriobiome TabPFN"], columns=metrics+["runtime"])
-        results[:] = cross_validate_sample(pred_model, data, labels, metrics, strat_split=True, cv=3, sampling=sampling, max_samples=None, seed=seed)
-        X_train, X_test, y_train, y_test = train_test_split(data, labels, train_size=1000, test_size=200, random_state=seed)
-        if sampling: X_train, y_train = sampling(X_train, y_train)
-        X_train, y_train = unison_shuffled_copies(X_train, y_train)
-        pred_model.fit(X_train, y_train)
-        preds = pred_model.predict(X_test)
-        print("\n% of positive predictions: ", np.sum(preds)/preds.shape[0])
-        print(results)
+    pred_model = TabPFNClassifier(model, config, device=device, no_preprocess_mode=False)
+    metrics = ["accuracy", "precision", "recall", "roc_auc", "f1"]
+    results = pd.DataFrame(np.zeros((1, len(metrics)+1)), index=["Medical TabPFN"], columns=metrics+["runtime"])
+    results[:],_ = cross_validate_sample(pred_model, mb_data, mb_labels, metrics, strat_split=True, cv=4, sampling=None, max_samples=1024, seed=seed)
+    X_train, X_test, y_train, y_test = train_test_split(mb_data, mb_labels, train_size=1000, test_size=200, random_state=seed)
+    X_train, y_train = reduce_n_samples(X_train, y_train, 1024)
+    X_train, y_train = unison_shuffled_copies(X_train, y_train)
+    pred_model.fit(X_train, y_train)
+    preds = pred_model.predict(X_test)
+    print("\n% of positive predictions: ", np.sum(preds)/preds.shape[0])
+    print(results)
     return results
 
 def _parse_args(config_parser, parser):

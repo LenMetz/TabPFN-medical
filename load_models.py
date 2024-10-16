@@ -81,13 +81,9 @@ class CatBoostOptim(BaseEstimator, ClassifierMixin):
             #dvalid = xgb.DMatrix(valid_x, label=valid_y)
         
             param = {
-                #"colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.01, 0.1),
-                "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.1, log=True),
-                "depth": trial.suggest_int("depth", 1, 10),
-                
-                "subsample": trial.suggest_float("subsample", 0.05, 1.0),
-                "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.05, 1.0),
-                "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 1, 100),
+                "objective": trial.suggest_categorical("objective", ["Logloss", "CrossEntropy"]),
+                "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.01, 0.1),
+                "depth": trial.suggest_int("depth", 1, 12),
                 "boosting_type": trial.suggest_categorical("boosting_type", ["Ordered", "Plain"]),
                 "bootstrap_type": trial.suggest_categorical(
                     "bootstrap_type", ["Bayesian", "Bernoulli", "MVS"]
@@ -100,8 +96,8 @@ class CatBoostOptim(BaseEstimator, ClassifierMixin):
             elif param["bootstrap_type"] == "Bernoulli":
                 param["subsample"] = trial.suggest_float("subsample", 0.1, 1)
         
-            model = cb.CatBoostClassifier(**param)
-            model.fit(X_train, y_train, verbose=0)
+            model = cb.CatBoostClassifier(**param, num_trees=100)
+            model.fit(X_train, y_train, verbose=False, eval_set=[(X_test, y_test)], early_stopping_rounds=10)
             preds = model.predict(X_test)
             roc_auc = sklearn.metrics.roc_auc_score(y_test, preds)
             return roc_auc

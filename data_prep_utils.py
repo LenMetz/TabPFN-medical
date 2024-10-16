@@ -2,6 +2,11 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
+from sklearn.feature_selection import SelectKBest
+from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+
+from sklearn.manifold import LocallyLinearEmbedding as LLE
 
 # method to fix class imbalance by adding random samples from less frequent class
 def oversample(X, y):
@@ -36,11 +41,107 @@ def get_microbiome(path):
     labels[labels=="CRC"] = 1
     return data, labels.astype(int)
 
-# select features with most non-zero entries
-def top_non_zero(data, reduced_length=100):
+# returns data with features removed that are zero over all samples
+def remove_zero_features(data):
+    return data[:,np.count_nonzero(data, axis=0)!=0]
+    
+def remove_zero_features_traintest(X_train, X_test):
+    indices = np.count_nonzero(X_train, axis=0)!=0
+    return X_train[:,indices], X_test[:,indices]
+
+
+class FeatureSelection():
+    def __init__(self, k=100):
+        self.feature_indices=None
+        self.k = k
+        self.best = 0
+    def fit(self, X):
+        pass
+    def transform(self, X):
+        return X[:,self.feature_indices[:self.k]]
+
+class PCASelect(FeatureSelection):
+    def __init__(self, k=100):
+        super().__init__(k)
+        self.pca = PCA(n_components=self.k)
+    def fit(self, X, y=None):
+        self.pca.fit(X)
+    def transform(self, X):
+        return self.pca.transform(X)
+        
+class AnovaSelect(FeatureSelection):
+    def __init__(self, k=100):
+        super().__init__(k)
+        self.anova = None
+    def fit(self, X, y):
+        self.anova = SelectKBest(k=self.k).fit(X, y)
+        self.feature_indices = np.argsort(self.anova.scores_)[::-1]
+    def transform(self,X):
+        return self.anova.transform(X)
+        
+class NonZeroSelect(FeatureSelection):
+    def __init__(self, k=100):
+        super().__init__(k)
+        self.feature_indices=None
+    def fit(self, X, y=None):
+        ranks = np.count_nonzero(X, axis=0)
+        self.feature_indices = np.argsort(ranks)[::-1]
+        self.best = self.feature_indices[0]
+        
+class MeanSelect(FeatureSelection):
+    def __init__(self, k=100):
+        super().__init__(k)
+    def fit(self, X, y=None):
+        ranks = np.mean(X, axis=0)
+        self.feature_indices = np.argsort(ranks)[::-1]
+        self.best = self.feature_indices[0]
+        
+class StdSelect(FeatureSelection):
+    def __init__(self, k=100):
+        super().__init__(k)
+    def fit(self, X, y=None):
+        ranks = np.std(X, axis=0)
+        self.feature_indices = np.argsort(ranks)[::-1]
+        self.best = self.feature_indices[0]
+        
+class MaxSelect(FeatureSelection):
+    def __init__(self, k=100):
+        super().__init__(k)
+    def fit(self, X, y=None):
+        ranks = np.max(X, axis=0)
+        self.feature_indices = np.argsort(ranks)[::-1]
+        self.best = self.feature_indices[0]
+        
+def pca_reduce(data, labels=None, reduced_length=100):
+    pca = PCA(n_components=reduced_length)
+    return pca.fit_transform(data)
+
+# select k features with most non-zero entries
+def top_non_zero(data, labels=None, reduced_length=100):
     counts = np.count_nonzero(data, axis=0)
     indices = np.argsort(counts)[::-1]
     return data[:,indices[:reduced_length]]
+
+# select k features with highest mean
+def top_mean(data, labels=None, reduced_length=100):
+    counts = np.mean(data, axis=0)
+    indices = np.argsort(counts)[::-1]
+    return data[:,indices[:reduced_length]]
+
+# select k features with highest std
+def top_std(data, labels=None, reduced_length=100):
+    counts = np.std(data, axis=0)
+    indices = np.argsort(counts)[::-1]
+    return data[:,indices[:reduced_length]]
+
+# select k features with highest max
+def top_max(data, labels=None, reduced_length=100):
+    counts = np.max(data, axis=0)
+    indices = np.argsort(counts)[::-1]
+    return data[:,indices[:reduced_length]]
+
+def top_anova(data, labels, reduced_length=100):
+    return SelectKBest(k=reduced_length).fit_transform(data, labels)
 
 # applies same shuffle to two array with the same shape in first dimension
 def unison_shuffled_copies(a, b, seed=42):

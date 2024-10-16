@@ -33,7 +33,9 @@ def stratified_split(data, labels, cv=3, max_samples=None, seed=42):
         
     return data_folds, labels_folds
 
-def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling=None, max_samples=None, seed=42, overwrite=True):
+def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling=None, 
+                          reducer=NonZeroSelect(), max_samples=None, seed=42, overwrite=True,
+                         n_best_delete=0):
     if strat_split:
         X_folds, y_folds = stratified_split(X, y, cv, max_samples,seed=seed)
     else:
@@ -47,6 +49,16 @@ def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling
         X_test, y_test = X_folds[-1], y_folds[-1]
         if sampling: X_train, y_train = sampling(X_train, y_train)
         X_train, y_train = unison_shuffled_copies(X_train, y_train,seed=seed)
+        X_test, y_test = unison_shuffled_copies(X_test, y_test,seed=seed)
+        if reducer is not None:
+            X_train, X_test = remove_zero_features_traintest(X_train, X_test)
+            reducer.fit(X_train, y_train)
+            if n_best_delete>0:
+                to_delete = reducer.feature_indices[:n_best_delete]
+                X_train, X_test = np.delete(X_train, to_delete,1), np.delete(X_test, to_delete,1)
+                reducer.fit(X_train, y_train)
+            X_train = reducer.transform(X_train)
+            X_test = reducer.transform(X_test)
         start_time = time.time()
         if model_clean.__class__.__name__=="TabPFNClassifier" or  model_clean.__class__.__name__=="MedPFNClassifier":
             if overwrite:
