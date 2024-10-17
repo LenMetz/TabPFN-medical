@@ -27,7 +27,7 @@ def stratified_split(data, labels, cv=3, max_samples=None, seed=42):
     for f in range(cv):
         data_single_fold = np.concatenate((c0_data[c0_size*f:c0_size*(f+1),:],c1_data[c1_size*f:c1_size*(f+1),:]))
         labels_single_fold = np.concatenate((np.zeros((c0_size)), np.ones((c1_size)))).astype(int)
-        data_single_fold, labels_single_fold = unison_shuffled_copies(data_single_fold, labels_single_fold)
+        data_single_fold, labels_single_fold = unison_shuffled_copies(data_single_fold, labels_single_fold, seed)
         data_folds.append(data_single_fold)
         labels_folds.append(labels_single_fold)
         
@@ -52,7 +52,10 @@ def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling
         X_test, y_test = unison_shuffled_copies(X_test, y_test,seed=seed)
         if reducer is not None:
             X_train, X_test = remove_zero_features_traintest(X_train, X_test)
-            reducer.fit(X_train, y_train)
+            if reducer.__class__.__name__=="AnovaSelect":
+                reducer.fit(X_train, y_train)
+            else:
+                reducer.fit(np.concatenate((X_train,X_test),axis=0), np.concatenate((y_train,y_test),axis=0))
             if n_best_delete>0:
                 to_delete = reducer.feature_indices[:n_best_delete]
                 X_train, X_test = np.delete(X_train, to_delete,1), np.delete(X_test, to_delete,1)

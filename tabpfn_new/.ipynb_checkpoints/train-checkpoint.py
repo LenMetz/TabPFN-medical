@@ -332,15 +332,17 @@ from tabpfn_new.scripts.model_builder import save_model
 
 mb_data, mb_labels = get_microbiome(path="datasets/data_all.csv")
 mb_data = remove_zero_features(mb_data)
-mb_data = top_anova(mb_data, mb_labels)
+#mb_data = top_anova(mb_data, mb_labels)
 mb_data, mb_labels = unison_shuffled_copies(mb_data, mb_labels, seed=42)
 def mb_test(model, config, device):
     seed=42
     pred_model = TabPFNClassifier(model, config, device=device, no_preprocess_mode=False)
     metrics = ["accuracy", "precision", "recall", "roc_auc", "f1"]
     results = pd.DataFrame(np.zeros((1, len(metrics)+1)), index=["Medical TabPFN"], columns=metrics+["runtime"])
-    results[:],_ = cross_validate_sample(pred_model, mb_data, mb_labels, metrics, strat_split=True, cv=4, sampling=None, max_samples=1024, seed=seed)
-    X_train, X_test, y_train, y_test = train_test_split(mb_data, mb_labels, train_size=1000, test_size=200, random_state=seed)
+    results[:],_ = cross_validate_sample(pred_model, mb_data, mb_labels, metrics, strat_split=True, cv=4, sampling=None, 
+                                         reducer=AnovaSelect(), max_samples=1024, seed=seed)
+    data = top_anova(mb_data, mb_labels)
+    X_train, X_test, y_train, y_test = train_test_split(data, mb_labels, train_size=1024, test_size=200, random_state=seed)
     X_train, y_train = reduce_n_samples(X_train, y_train, 1024)
     X_train, y_train = unison_shuffled_copies(X_train, y_train)
     pred_model.fit(X_train, y_train)

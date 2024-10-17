@@ -13,6 +13,7 @@ import xgboost as xgb
 from xgboost import XGBClassifier
 import catboost as cb
 import optuna
+from math import e
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -81,7 +82,8 @@ class CatBoostOptim(BaseEstimator, ClassifierMixin):
             #dvalid = xgb.DMatrix(valid_x, label=valid_y)
         
             param = {
-                "objective": trial.suggest_categorical("objective", ["Logloss", "CrossEntropy"]),
+                "objective": trial.suggest_categorical("objective", ["CrossEntropy"]),
+                "learning_rate": trial.suggest_float("learning_rate", 1e-5, 1.0),
                 "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.01, 0.1),
                 "depth": trial.suggest_int("depth", 1, 12),
                 "boosting_type": trial.suggest_categorical("boosting_type", ["Ordered", "Plain"]),
@@ -92,7 +94,7 @@ class CatBoostOptim(BaseEstimator, ClassifierMixin):
             }
         
             if param["bootstrap_type"] == "Bayesian":
-                param["bagging_temperature"] = trial.suggest_float("bagging_temperature", 0, 10)
+                param["bagging_temperature"] = trial.suggest_float("bagging_temperature", 0, 1)
             elif param["bootstrap_type"] == "Bernoulli":
                 param["subsample"] = trial.suggest_float("subsample", 0.1, 1)
         
@@ -126,7 +128,7 @@ class XGBoostOptim(BaseEstimator, ClassifierMixin):
         self.X = X
         self.y = y
         def objective(trial):
-            X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=0.25, stratify=self.y)
+            X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=0.1, stratify=self.y)
             #train = xgb.DMatrix(train_x, label=train_y)
             #dvalid = xgb.DMatrix(valid_x, label=valid_y)
         
@@ -134,28 +136,29 @@ class XGBoostOptim(BaseEstimator, ClassifierMixin):
                 "verbosity": 0,
                 "objective": "binary:logistic",
                 # use exact for small dataset.
-                "tree_method": "exact",
+                "tree_method": "auto",
                 # defines booster, gblinear for linear functions.
-                "booster": trial.suggest_categorical("booster", ["gbtree"]),
+                "booster": "gbtree",
                 # L2 regularization weight.
-                "lambda": trial.suggest_float("lambda", 1e-8, 1.0, log=True),
+                "lambda": trial.suggest_float("lambda", 1e-16, 1e2, log=True),
                 # L1 regularization weight.
-                "alpha": trial.suggest_float("alpha", 1e-8, 1.0, log=True),
+                "alpha": trial.suggest_float("alpha", 1e-16, 1e5, log=True),
                 # sampling ratio for training data.
-                "subsample": trial.suggest_float("subsample", 0.4, 0.8),
+                "subsample": trial.suggest_float("subsample", 0.2, 1.0),
                 # sampling according to each tree.
                 "colsample_bytree": trial.suggest_float("colsample_bytree", 0.2, 1.0),
+                "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.2, 1.0),
             }
         
             if param["booster"] in ["gbtree", "dart"]:
                 # maximum depth of the tree, signifies complexity of the tree.
-                param["max_depth"] = trial.suggest_int("max_depth", 3, 9, step=2)
+                param["max_depth"] = trial.suggest_int("max_depth", 1, 10, step=1)
                 # minimum child weight, larger the term more conservative the tree.
-                param["min_child_weight"] = trial.suggest_int("min_child_weight", 2, 10)
-                param["eta"] = trial.suggest_float("eta", 1e-3, 1e-1, log=True)
+                param["min_child_weight"] = trial.suggest_float("min_child_weight", 1e-16, 1e5, log=True)
+                param["eta"] = trial.suggest_float("eta", 1e-7, 1.0, log=True)
                 # defines how selective algorithm is.
-                param["gamma"] = trial.suggest_float("gamma", 1e-8, 1.0, log=True)
-                param["grow_policy"] = trial.suggest_categorical("grow_policy", ["depthwise", "lossguide"])
+                param["gamma"] = trial.suggest_float("gamma", 1e-16, 1e2, log=True)
+                param["grow_policy"] = "depthwise"
         
             if param["booster"] == "dart":
                 param["sample_type"] = trial.suggest_categorical("sample_type", ["uniform", "weighted"])
@@ -163,7 +166,7 @@ class XGBoostOptim(BaseEstimator, ClassifierMixin):
                 param["rate_drop"] = trial.suggest_float("rate_drop", 1e-8, 1.0, log=True)
                 param["skip_drop"] = trial.suggest_float("skip_drop", 1e-8, 1.0, log=True)
         
-            model = XGBClassifier(**param)
+            model = XGBClassifier(n_estimators=5, **param)
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
             roc_auc = sklearn.metrics.roc_auc_score(y_test, preds)
@@ -171,7 +174,7 @@ class XGBoostOptim(BaseEstimator, ClassifierMixin):
             
         study = optuna.create_study(direction="maximize")
         study.optimize(objective, n_trials=self.n_optim, timeout=600)
-        self.model = XGBClassifier(**study.best_params, objective='binary:logistic')
+        self.model = XGBClassifier(n_estimators=5, **study.best_params, objective='binary:logistic')
         self.model.fit(self.X,self.y)
     
     def predict(self, X):
