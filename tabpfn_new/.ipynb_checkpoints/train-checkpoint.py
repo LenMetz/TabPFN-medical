@@ -336,7 +336,7 @@ mb_data = remove_zero_features(mb_data)
 mb_data, mb_labels = unison_shuffled_copies(mb_data, mb_labels, seed=42)
 def mb_test(model, config, device):
     seed=42
-    pred_model = TabPFNClassifier(model, config, device=device, no_preprocess_mode=False)
+    pred_model = TabPFNClassifier(model, config, device=device, no_preprocess_mode=False, norm=config["normalize"])
     metrics = ["accuracy", "precision", "recall", "roc_auc", "f1"]
     results = pd.DataFrame(np.zeros((1, len(metrics)+1)), index=["Medical TabPFN"], columns=metrics+["runtime"])
     results[:],_ = cross_validate_sample(pred_model, mb_data, mb_labels, metrics, strat_split=True, cv=4, sampling=None, 
@@ -345,8 +345,9 @@ def mb_test(model, config, device):
     X_train, X_test, y_train, y_test = train_test_split(data, mb_labels, train_size=1024, test_size=200, random_state=seed)
     X_train, y_train = reduce_n_samples(X_train, y_train, 1024)
     X_train, y_train = unison_shuffled_copies(X_train, y_train)
-    pred_model.fit(X_train, y_train)
-    preds = pred_model.predict(X_test)
+    with torch.no_grad():
+        pred_model.fit(X_train, y_train)
+        preds = pred_model.predict(X_test)
     print("\n% of positive predictions: ", np.sum(preds)/preds.shape[0])
     print(results)
     return results

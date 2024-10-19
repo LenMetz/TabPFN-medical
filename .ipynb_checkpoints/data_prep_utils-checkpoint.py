@@ -39,6 +39,7 @@ def get_microbiome(path):
     labels = df_binary["disease"].to_numpy()
     labels[labels=="healthy"] = 0
     labels[labels=="CRC"] = 1
+    data = (1/np.sum(data, axis=1, keepdims=True))*data
     return data, labels.astype(int)
 
 # returns data with features removed that are zero over all samples

@@ -112,7 +112,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, model_par=None, c=None, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='',
                  N_ensemble_configurations=3, no_preprocess_mode=False, multiclass_decoder='permutation',
                  feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32,
-                 subsample_features=False):
+                 subsample_features=False, norm=True):
         """
         Initializes the classifier and loads the model. 
         Depending on the arguments, the model is either loaded from memory, from a file, or downloaded from the 
@@ -187,6 +187,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.only_inference = only_inference
         self.seed = seed
         self.no_grad = no_grad
+        self.norm = norm
         self.subsample_features = subsample_features
 
         assert self.no_preprocess_mode if not self.no_grad else True, \
@@ -284,6 +285,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                                          style=self.style,
                                          inference_mode=True,
                                          preprocess_transform='none' if self.no_preprocess_mode else 'mix',
+                                         normalize=self.norm,
                                          normalize_with_test=normalize_with_test,
                                          N_ensemble_configurations=self.N_ensemble_configurations,
                                          softmax_temperature=self.temperature,
@@ -315,6 +317,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                         inference_mode=False,
                         num_classes=2,
                         extend_features=True,
+                        normalize=True,
                         normalize_with_test=False,
                         normalize_to_ranking=False,
                         softmax_temperature=0.0,
@@ -400,7 +403,8 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                 pt = RobustScaler(unit_variance=True)
 
         # eval_xs, eval_ys = normalize_data(eval_xs), normalize_data(eval_ys)
-        eval_xs = normalize_data(eval_xs, normalize_positions=-1 if normalize_with_test else eval_position)
+        if normalize:
+            eval_xs = normalize_data(eval_xs, normalize_positions=-1 if normalize_with_test else eval_position)
 
         # Removing empty features
         eval_xs = eval_xs[:, 0, :]
