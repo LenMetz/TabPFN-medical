@@ -2,4 +2,5 @@ datasets/
 temp_weights/
 saved_models/
 logs/
+results/plots
 tabpfn_new/models_diff/
