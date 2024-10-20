@@ -8,6 +8,21 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
 
 from sklearn.manifold import LocallyLinearEmbedding as LLE
 
+# moving average
+def moving_average(arr, window_size=5):
+    if window_size <= 0:
+        raise ValueError("Window size must be positive")
+    if len(arr) < window_size:
+        raise ValueError("Array length must be greater than or equal to the window size")
+    
+    moving_averages = []
+    for i in range(len(arr) - window_size + 1):
+        window = arr[i:i + window_size]
+        window_avg = sum(window) / window_size
+        moving_averages.append(window_avg)
+    
+    return moving_averages
+
 # method to fix class imbalance by adding random samples from less frequent class
 def oversample(X, y):
     min_class = np.argmin([X[np.where(y==0)].shape[0],X[np.where(y==1)].shape[0]])
@@ -42,6 +57,9 @@ def get_microbiome(path):
     data = (1/np.sum(data, axis=1, keepdims=True))*data
     return data, labels.astype(int)
 
+def data_to_comp(data):
+    return (1/np.sum(data, axis=1, keepdims=True))*data
+
 # returns data with features removed that are zero over all samples
 def remove_zero_features(data):
     return data[:,np.count_nonzero(data, axis=0)!=0]
@@ -50,6 +68,8 @@ def remove_zero_features_traintest(X_train, X_test):
     indices = np.count_nonzero(X_train, axis=0)!=0
     return X_train[:,indices], X_test[:,indices]
 
+def remove_same_features_traintest(X_train, X_test):
+    return X_train[:,np.any(X_train != X_train[0, :], axis=0)], X_test[:,np.any(X_train != X_train[0, :], axis=0)]
 
 class FeatureSelection():
     def __init__(self, k=100):
@@ -60,6 +80,13 @@ class FeatureSelection():
         pass
     def transform(self, X):
         return X[:,self.feature_indices[:self.k]]
+
+class RandomSelect(FeatureSelection):
+    def __init__(self, k=100):
+        super().__init__(k)
+        self.feature_indices=None
+    def fit(self, X, y=None):
+        self.feature_indices = np.random.permutation(np.arange(X.shape[1]))
 
 class PCASelect(FeatureSelection):
     def __init__(self, k=100):

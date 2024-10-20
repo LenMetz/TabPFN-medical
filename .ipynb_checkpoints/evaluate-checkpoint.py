@@ -51,7 +51,7 @@ def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling
         X_train, y_train = unison_shuffled_copies(X_train, y_train,seed=seed)
         X_test, y_test = unison_shuffled_copies(X_test, y_test,seed=seed)
         if reducer is not None:
-            X_train, X_test = remove_zero_features_traintest(X_train, X_test)
+            X_train, X_test = remove_same_features_traintest(X_train, X_test)
             if reducer.__class__.__name__=="AnovaSelect":
                 reducer.fit(X_train, y_train)
             else:
@@ -60,6 +60,7 @@ def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling
                 to_delete = reducer.feature_indices[:n_best_delete]
                 X_train, X_test = np.delete(X_train, to_delete,1), np.delete(X_test, to_delete,1)
                 reducer.fit(X_train, y_train)
+            #print(X_train.shape)
             X_train = reducer.transform(X_train)
             X_test = reducer.transform(X_test)
         start_time = time.time()

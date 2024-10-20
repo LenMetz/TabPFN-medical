@@ -64,6 +64,20 @@ class TabForestPFNClassifier(BaseEstimator, ClassifierMixin):
         logits = self.trainer.predict(self.X_, self.y_, X)
         return np.exp(logits) / np.exp(logits).sum(axis=1)[:, None]
 
+class MajorityClass(BaseEstimator, ClassifierMixin):
+    def __init__(self, maj_class=0):
+        super().__init__()
+        self.maj_class = maj_class
+    
+    def fit(self, X, y):
+        counts = np.unique(y, return_counts=True)
+        self.maj_class = counts[0][np.argmax(counts[1])]
+    def predict(self, X):
+        return np.full(X.shape[0], self.maj_class)
+    
+    def predict_proba(self, X):
+        return np.full(X.shape[0], self.maj_class)
+
 class CatBoostOptim(BaseEstimator, ClassifierMixin):
     
     def __init__(self, X=None, y=None, n_optim=10):
