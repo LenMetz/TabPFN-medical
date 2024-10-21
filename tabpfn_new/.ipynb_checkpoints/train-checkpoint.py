@@ -71,7 +71,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
           microbiome_test=False, config=None, **model_extra_args
           ):
     device = gpu_device if torch.cuda.is_available() else 'cpu:0'
-    print(f'Using {device} device')
+    #print(f'Using {device} device')
     using_dist, rank, device = init_dist(device)
     single_eval_pos_gen = single_eval_pos_gen if callable(single_eval_pos_gen) else lambda: single_eval_pos_gen
 
@@ -105,7 +105,7 @@ def train(priordataloader_class, criterion, encoder_generator, emsize=200, nhid=
     if initialize_with_model is not None:
         model.init_from_small_model(initialize_with_model)
 
-    print(f"Using a Transformer with {sum(p.numel() for p in model.parameters())/1000/1000:.{2}f} M parameters")
+    #print(f"Using a Transformer with {sum(p.numel() for p in model.parameters())/1000/1000:.{2}f} M parameters")
 
     try:
         for (k, v), (k2, v2) in zip(model.state_dict().items(), initialize_with_model.state_dict().items()):

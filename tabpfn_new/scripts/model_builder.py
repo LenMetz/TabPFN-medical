@@ -275,7 +275,7 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
         extra_kwargs = {'get_batch': get_batch_base, 'differentiable_hyperparameters': config['differentiable_hyperparameters']}
         model_proto = priors.differentiable_prior
         use_style = True
-    print(f"Using style prior: {use_style}")
+    #print(f"Using style prior: {use_style}")
 
     if (('nan_prob_no_reason' in config and config['nan_prob_no_reason'] > 0.0) or
         ('nan_prob_a_reason' in config and config['nan_prob_a_reason'] > 0.0) or
