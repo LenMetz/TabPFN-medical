@@ -35,7 +35,7 @@ def stratified_split(data, labels, cv=3, max_samples=None, seed=42):
 
 def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling=None, 
                           reducer=NonZeroSelect(), max_samples=None, seed=42, overwrite=True,
-                         n_best_delete=0):
+                         n_best_delete=0, recomp=False):
     if strat_split:
         X_folds, y_folds = stratified_split(X, y, cv, max_samples,seed=seed)
     else:
@@ -63,6 +63,8 @@ def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling
             #print(X_train.shape)
             X_train = reducer.transform(X_train)
             X_test = reducer.transform(X_test)
+            if recomp:
+                X_train, X_test = data_to_comp(X_train), data_to_comp(X_test)
         start_time = time.time()
         if model_clean.__class__.__name__=="TabPFNClassifier" or  model_clean.__class__.__name__=="MedPFNClassifier":
             if overwrite:
@@ -81,6 +83,7 @@ def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling
             else:
                 results[i].append(sklearn.metrics.get_scorer(m)._score_func(y_test, preds))
         #print(results)
+        del model_clean
     results_mean = np.mean(np.array(results), axis=1)
     results_std = np.std(np.array(results), axis=1)
     return results_mean, results_std

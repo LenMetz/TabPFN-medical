@@ -11,7 +11,7 @@ from tabularbench.core.trainer_finetune import TrainerFinetune
 from tabularbench.models.foundation.foundation_transformer import FoundationTransformer
 import xgboost as xgb
 from xgboost import XGBClassifier
-import catboost as cb
+#import catboost as cb
 import optuna
 from math import e
 
@@ -78,7 +78,7 @@ class MajorityClass(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X):
         return np.full(X.shape[0], self.maj_class)
 
-class CatBoostOptim(BaseEstimator, ClassifierMixin):
+'''class CatBoostOptim(BaseEstimator, ClassifierMixin):
     
     def __init__(self, X=None, y=None, n_optim=10):
         super().__init__()
@@ -127,7 +127,7 @@ class CatBoostOptim(BaseEstimator, ClassifierMixin):
         return self.model.predict(X)
     
     def predict_proba(self, X):
-        return self.model.predict_proba(X)
+        return self.model.predict_proba(X)'''
 
 class XGBoostOptim(BaseEstimator, ClassifierMixin):
     

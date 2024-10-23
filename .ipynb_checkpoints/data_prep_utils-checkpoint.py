@@ -58,6 +58,7 @@ def get_microbiome(path):
     return data, labels.astype(int)
 
 def data_to_comp(data):
+    data[np.sum(data, axis=1)==0,:]=1
     return (1/np.sum(data, axis=1, keepdims=True))*data
 
 # returns data with features removed that are zero over all samples
