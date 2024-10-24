@@ -75,11 +75,18 @@ def cross_validate_sample(model, X, y, metrics, strat_split=True, cv=3, sampling
         else:
             model_clean.fit(X_train, y_train)
         with torch.no_grad():
-            preds = model_clean.predict(X_test)
+            #preds = model_clean.predict(X_test)
+            probs = model_clean.predict_proba(X_test)
+            #if model_clean.__class__.__name__=="MedPFNClassifier":
+            if len(probs.shape)>1:
+                preds = np.argmax(probs, axis=1)
+                probs = (probs[:,1]-probs[:,0]+1)*0.5
+            else:
+                preds = (probs>0.5).astype(float)
         results[-1].append(time.time() - start_time)
         for i, m in enumerate(metrics):
-            if m == "roc_auc_ovr":
-                results[i] += sklearn.metrics.roc_auc_score(y_test, preds, multi_class="ovr")
+            if m =="roc_auc":
+                results[i].append(sklearn.metrics.get_scorer(m)._score_func(y_test, probs))
             else:
                 results[i].append(sklearn.metrics.get_scorer(m)._score_func(y_test, preds))
         #print(results)
