@@ -287,7 +287,7 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
         encoder = None
 
     if config['max_num_classes'] == 2:
-        loss = Losses.ce(2)#ce(2)
+        loss = Losses.ce(2)
     elif config['max_num_classes'] > 2:
         loss = Losses.ce(config['max_num_classes'])
 

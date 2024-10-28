@@ -2,7 +2,7 @@ import numpy as np
 import sklearn
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.multiclass import unique_labels
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from tabularbench.core.dataset_split import make_stratified_dataset_split
 from pathlib import Path
 from tabularbench.config.config_run import ConfigRun
@@ -11,9 +11,12 @@ from tabularbench.core.trainer_finetune import TrainerFinetune
 from tabularbench.models.foundation.foundation_transformer import FoundationTransformer
 import xgboost as xgb
 from xgboost import XGBClassifier
-#import catboost as cb
+import torch
+import catboost as cb
 import optuna
 from math import e
+from autogluon.tabular import TabularDataset, TabularPredictor
+import pandas as pd
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -154,9 +157,9 @@ class XGBoostOptim(BaseEstimator, ClassifierMixin):
                 # defines booster, gblinear for linear functions.
                 "booster": "gbtree",
                 # L2 regularization weight.
-                "lambda": trial.suggest_float("lambda", 1e-16, 1e2, log=True),
+                "lambda": trial.suggest_float("lambda", 1e-8, 1e2, log=True),
                 # L1 regularization weight.
-                "alpha": trial.suggest_float("alpha", 1e-16, 1e5, log=True),
+                "alpha": trial.suggest_float("alpha", 1e-8, 1e5, log=True),
                 # sampling ratio for training data.
                 "subsample": trial.suggest_float("subsample", 0.2, 1.0),
                 # sampling according to each tree.
@@ -168,10 +171,10 @@ class XGBoostOptim(BaseEstimator, ClassifierMixin):
                 # maximum depth of the tree, signifies complexity of the tree.
                 param["max_depth"] = trial.suggest_int("max_depth", 1, 10, step=1)
                 # minimum child weight, larger the term more conservative the tree.
-                param["min_child_weight"] = trial.suggest_float("min_child_weight", 1e-16, 1e5, log=True)
-                param["eta"] = trial.suggest_float("eta", 1e-7, 1.0, log=True)
+                param["min_child_weight"] = trial.suggest_float("min_child_weight", 1e-8, 1e5, log=True)
+                param["eta"] = trial.suggest_float("eta", 1e-5, 1.0, log=True)
                 # defines how selective algorithm is.
-                param["gamma"] = trial.suggest_float("gamma", 1e-16, 1e2, log=True)
+                param["gamma"] = trial.suggest_float("gamma", 1e-8, 1e2, log=True)
                 param["grow_policy"] = "depthwise"
         
             if param["booster"] == "dart":
@@ -182,8 +185,8 @@ class XGBoostOptim(BaseEstimator, ClassifierMixin):
         
             model = XGBClassifier(n_estimators=5, **param)
             model.fit(X_train, y_train)
-            preds = model.predict(X_test)
-            roc_auc = sklearn.metrics.roc_auc_score(y_test, preds)
+            preds = model.predict_proba(X_test)
+            roc_auc = sklearn.metrics.roc_auc_score(torch.nn.functional.one_hot(torch.tensor(y_test).to(torch.int64)).numpy(), preds, multi_class="ovr")
             return roc_auc
             
         study = optuna.create_study(direction="maximize")
@@ -196,3 +199,88 @@ class XGBoostOptim(BaseEstimator, ClassifierMixin):
     
     def predict_proba(self, X):
         return self.model.predict_proba(X)
+
+class XGBoostGrid(BaseEstimator, ClassifierMixin):
+    
+    def __init__(self, X=None, y=None, n_optim=10):
+        super().__init__()
+        self.X = X
+        self.y = y
+        self.n_optim=n_optim
+        self.model = XGBClassifier()
+
+    def fit(self, X, y):
+        self.X = X
+        self.y = y
+        
+        param_grid = {
+            'learning_rate': [0.01, 0.1, 1.0],
+            'max_depth': [5, 7, 9],
+            'subsample': [0.5, 0.7],
+            'colsample_bytree': [0.5, 0.7],
+            'n_estimators': [5,25,50],
+            'gamma': [0.1,0.5,0.9]
+            
+        }
+        grid_search = GridSearchCV(estimator = self.model, param_grid=param_grid, cv=5, scoring="roc_auc")
+        grid_search.fit(X, y)
+        best_params = grid_search.best_params_
+        self.model =  XGBClassifier(**best_params,)
+        self.model.fit(X,y)
+    
+    def predict(self, X):
+        return self.model.predict(X)
+    
+    def predict_proba(self, X):
+        return self.model.predict_proba(X)
+
+
+
+class CatBoostGrid(BaseEstimator, ClassifierMixin):
+    
+    def __init__(self, X=None, y=None, n_optim=10):
+        super().__init__()
+        self.X = X
+        self.y = y
+        self.n_optim=n_optim
+        self.model = cb.CatBoostClassifier(silent=True)
+
+    def fit(self, X, y):
+        self.X = X
+        self.y = y
+        
+        param_grid = {
+            'depth':[6,9],
+            'iterations':[100,200],
+            'learning_rate':[0.01,0.1,0.3], 
+            'l2_leaf_reg':[1,10]
+        }
+        grid_search = GridSearchCV(estimator = self.model, param_grid=param_grid, cv=5, scoring="roc_auc")
+        grid_search.fit(X, y)
+        best_params = grid_search.best_params_
+        self.model =  cb.CatBoostClassifier(**best_params, silent=True)
+        self.model.fit(X,y)
+    
+    def predict(self, X):
+        return self.model.predict(X)
+    
+    def predict_proba(self, X):
+        return self.model.predict_proba(X)
+
+class AutoGluon(BaseEstimator, ClassifierMixin):
+
+    def __init__(self):
+        super().__init__()
+        self.model = TabularPredictor(label="label", eval_metric='roc_auc', verbosity=0)
+    def fit(self, X, y):
+        data = pd.DataFrame(X)
+        data.insert(0,"label",y)
+        self.model.fit(data)
+
+    def predict(self,X):
+        data = pd.DataFrame(X)
+        return self.model.predict(data)
+        
+    def predict_proba(self,X):
+        data = pd.DataFrame(X)
+        return self.model.predict_proba(data)

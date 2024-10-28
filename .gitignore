@@ -4,3 +4,5 @@ saved_models/
 logs/
 results/plots
 tabpfn_new/models_diff/
+AutogluonModels/
+catboost_info/

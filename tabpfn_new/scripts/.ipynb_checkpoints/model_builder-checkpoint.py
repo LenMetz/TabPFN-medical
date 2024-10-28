@@ -275,7 +275,7 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
         extra_kwargs = {'get_batch': get_batch_base, 'differentiable_hyperparameters': config['differentiable_hyperparameters']}
         model_proto = priors.differentiable_prior
         use_style = True
-    print(f"Using style prior: {use_style}")
+    #print(f"Using style prior: {use_style}")
 
     if (('nan_prob_no_reason' in config and config['nan_prob_no_reason'] > 0.0) or
         ('nan_prob_a_reason' in config and config['nan_prob_a_reason'] > 0.0) or
@@ -287,7 +287,7 @@ def get_model(config, device, should_train=True, verbose=False, state_dict=None,
         encoder = None
 
     if config['max_num_classes'] == 2:
-        loss = Losses.ce(2)#ce(2)
+        loss = Losses.ce(2)
     elif config['max_num_classes'] > 2:
         loss = Losses.ce(config['max_num_classes'])
 

@@ -112,7 +112,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, model_par=None, c=None, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='',
                  N_ensemble_configurations=3, no_preprocess_mode=False, multiclass_decoder='permutation',
                  feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32,
-                 subsample_features=False, norm=True):
+                 subsample_features=False, norm=True, clr=False):
         """
         Initializes the classifier and loads the model. 
         Depending on the arguments, the model is either loaded from memory, from a file, or downloaded from the 
@@ -188,6 +188,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.seed = seed
         self.no_grad = no_grad
         self.norm = norm
+        self.clr = clr
         self.subsample_features = subsample_features
 
         assert self.no_preprocess_mode if not self.no_grad else True, \
@@ -286,6 +287,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                                          inference_mode=True,
                                          preprocess_transform='none' if self.no_preprocess_mode else 'mix',
                                          normalize=self.norm,
+                                         clr=self.clr,
                                          normalize_with_test=normalize_with_test,
                                          N_ensemble_configurations=self.N_ensemble_configurations,
                                          softmax_temperature=self.temperature,
@@ -303,7 +305,11 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
 
     def predict(self, X, return_winning_probability=False, normalize_with_test=False):
         p = self.predict_proba(X, normalize_with_test=normalize_with_test)
-        y = np.argmax(p, axis=-1)
+        if p.shape[1]>1:
+            y = np.argmax(p, axis=-1)
+        else:
+            #print(p)
+            y = (p>0.5).astype(float)
         y = self.classes_.take(np.asarray(y, dtype=np.intp))
         if return_winning_probability:
             return y, p.max(axis=-1)
@@ -318,6 +324,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                         num_classes=2,
                         extend_features=True,
                         normalize=True,
+                        clr=False,
                         normalize_with_test=False,
                         normalize_to_ranking=False,
                         softmax_temperature=0.0,
@@ -403,6 +410,9 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                 pt = RobustScaler(unit_variance=True)
 
         # eval_xs, eval_ys = normalize_data(eval_xs), normalize_data(eval_ys)
+        if clr:
+            eval_xs = eval_xs+1e-10
+            eval_xs = torch.log(eval_xs)-torch.mean(torch.log(eval_xs), dim=1, keepdim=True)
         if normalize:
             eval_xs = normalize_data(eval_xs, normalize_positions=-1 if normalize_with_test else eval_position)
 
@@ -469,7 +479,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
         if i == 1:
             return 'none'
 
-    preprocess_transform_configurations = ['power_all'] if preprocess_transform == 'mix' else [preprocess_transform]
+    preprocess_transform_configurations = ['none', 'power_all'] if preprocess_transform == 'mix' else [preprocess_transform]
 
     if seed is not None:
         torch.manual_seed(seed)
@@ -559,7 +569,10 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
     if average_logits and not return_logits:
         if fp16_inference:
             output = output.float()
-        output = torch.nn.functional.softmax(output, dim=-1)
+        if output.shape[-1]>1:
+            output = torch.nn.functional.softmax(output, dim=-1)
+        else:
+            output = torch.nn.functional.sigmoid(output)
 
     output = torch.transpose(output, 0, 1)
 
@@ -569,19 +582,20 @@ class MedPFNClassifier(TabPFNClassifier):
     def __init__(self, model_par=None, c=None, device='cpu', base_path=None, filename=None,
                  N_ensemble_configurations=3, ft_epochs=0, ft_lr=1e-5, max_s=1024, max_q=256, no_preprocess_mode=False, multiclass_decoder='permutation',
                  feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32,
-                 subsample_features=False):
+                 subsample_features=False, clr=False):
 
         model, config = load_model(base_path, filename, device="cpu", eval_positions=None, verbose=False)
         self.device = device
         self.model_par = model_par
         self.model = model
         self.pred_model = TabPFNClassifier(model[2], config, device="cpu", N_ensemble_configurations=N_ensemble_configurations, 
-                                           multiclass_decoder=multiclass_decoder, no_preprocess_mode=no_preprocess_mode)
+                                           multiclass_decoder=multiclass_decoder, no_preprocess_mode=no_preprocess_mode, clr=clr)
         self.c = c
         self.ft_epochs = ft_epochs
         self.ft_lr = ft_lr
         self.max_s = max_s
         self.max_q = max_q
+        self.clr = clr
         self.config = config
         self.style = None
         self.temperature = None

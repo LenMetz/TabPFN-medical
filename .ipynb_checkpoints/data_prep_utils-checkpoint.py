@@ -61,6 +61,17 @@ def data_to_comp(data):
     data[np.sum(data, axis=1)==0,:]=1
     return (1/np.sum(data, axis=1, keepdims=True))*data
 
+def clr(data):
+    data = data+1e-10
+    data = np.log(data)-np.mean(np.log(data), axis=1, keepdims=True)
+    return data
+
+def normalize(data):
+    return (data-np.mean(data,axis=0))/(np.std(data,axis=0)+1e-15)
+
+def no_normalize(data):
+    return data
+
 # returns data with features removed that are zero over all samples
 def remove_zero_features(data):
     return data[:,np.count_nonzero(data, axis=0)!=0]
@@ -204,8 +215,3 @@ def df_to_numpy(df):
         data = pd.factorize(df)[0]
     return data
 
-#
-def normalize(data):
-    scaler = preprocessing.StandardScaler().fit(data)
-    data_scaled = scaler.transform(data)
-    return data_scaled, scaler

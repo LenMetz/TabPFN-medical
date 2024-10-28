@@ -3,6 +3,7 @@ import random
 import matplotlib.pyplot as plt
 import torch
 from torch import nn
+import numpy as n
 
 from .utils import get_batch_to_dataloader
 from tabpfn.utils import normalize_data, nan_handling_missing_for_unknown_reason_value, nan_handling_missing_for_no_reason_value, nan_handling_missing_for_a_reason_value, to_ranking_low_mem, remove_outliers, normalize_by_used_features_f
@@ -34,7 +35,7 @@ class VariableImbalancedBinarize(nn.Module):
     def forward(self, x):
         std = torch.std(x,dim=0)
         med = torch.median(x,dim=0)[0]
-        split = med + self.epoch_frac*torch.normal(0, 1,(1,))*std
+        split = med + self.epoch_frac*torch.normal(0, 1,(1,)).to(med.device)*std
         return (x > split).float()
         
 class StaticImbalancedBinarize(nn.Module):
@@ -269,6 +270,9 @@ class FlexibleCategorical(torch.nn.Module):
             x = to_ranking_low_mem(x)
         else:
             x = remove_outliers(x)
+        if 'clr' in self.h and self.h["clr"]==True:
+            x = x+1e-10
+            x = torch.log(x)-torch.mean(torch.log(x), dim=1, keepdim=True)
         if 'normalize' in self.h and self.h["normalize"]==True:
             x, y = normalize_data(x), normalize_data(y)
         if time_it:
