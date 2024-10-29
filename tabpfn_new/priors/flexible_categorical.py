@@ -48,6 +48,15 @@ class StaticImbalancedBinarize(nn.Module):
         med = torch.median(x,dim=0)[0]
         split = med + self.frac*torch.normal(0, 1,(1,))*std
         return (x > split).float()
+
+class FixedImbalancedBinarize(nn.Module):
+    def __init__(self, frac):
+        super().__init__()
+        self.frac = frac
+        
+    def forward(self, x):
+        split = torch.quantile(x, self.frac)
+        return (x > split).float()
         
 class ImbalancedBinarize(nn.Module):
     def __init__(self):
@@ -208,6 +217,8 @@ class FlexibleCategorical(torch.nn.Module):
                     self.class_assigner = VariableImbalancedBinarize(self.h["epoch_frac"])
                 elif self.h['multiclass_type'] == "static_balance":
                     self.class_assigner = StaticImbalancedBinarize(self.h["frac"])
+                elif self.h['multiclass_type'] == "fixed_balance":
+                    self.class_assigner = FixedImbalancedBinarize(self.h["frac"])
                 else:
                     raise ValueError("Unknow Multiclass type")
 

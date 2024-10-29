@@ -117,14 +117,23 @@ def get_batch(batch_size, seq_len, num_features, hyperparameters, device=default
                 
             def sample_mnd(size=(1000,100)):
                 M = hyperparameters["mnd_M"] if "mnd_M" in hyperparameters else 1000
-                a1 = hyperparameters["mnd_a1"] if "mnd_a1" in hyperparameters else 1
-                a2 = hyperparameters["mnd_a2"] if "mnd_a2" in hyperparameters else 5
-                a1 = np.random.uniform(0.5, 5, size[1])
-                a2 = np.random.uniform(0.5, 10, size[1])
-                alphas = np.random.beta(a1,a2)#,size[1])
+                mnd_noise = hyperparameters["mnd_noise"] if "mnd_noise" in hyperparameters else 0
+                alpha_bound = hyperparameters["alpha_bound"] if "alpha_bound" in hyperparameters else 0
+                a1a2_bound = hyperparameters["a1a2_bound"] if "a1a2_bound" in hyperparameters else 0
+                a1_low = hyperparameters["mnd_a1_l"] if "mnd_a1_l" in hyperparameters else 0.25
+                a1_high = hyperparameters["mnd_a1_h"] if "mnd_a1_h" in hyperparameters else 0.75
+                a2_low = hyperparameters["mnd_a2_l"] if "mnd_a2_l" in hyperparameters else 1
+                a2_high = hyperparameters["mnd_a2_h"] if "mnd_a2_h" in hyperparameters else 10
+                #a1 = np.abs(np.random.normal(0,a1_high, size[1]))+a1a2_bound#np.random.uniform(a1_low,a1_high, size[1])+a1a2_bound
+                #a2 = np.abs(np.random.normal(0,a2_high, size[1]))+a1a2_bound#np.random.uniform(a2_low,a2_high, size[1])+a1a2_bound
+                a1 = np.random.uniform(a1_low,a1_high, size[1])+a1a2_bound
+                a2 = np.random.uniform(a2_low,a2_high, size[1])+a1a2_bound
+                #print(np.min(a1),np.min(a2))
+                alphas = np.maximum(alpha_bound,np.random.beta(a1,a2))#,size[1])
+                #print(np.min(alphas))
                 thetas = [np.random.dirichlet(alphas) for i in range(size[0])]
                 #print(thetas, np.sum(thetas))
-                X = np.asarray([np.random.multinomial(M, theta)/M for theta in thetas])
+                X = np.asarray([np.random.multinomial(M, theta)/M+np.random.binomial(1,0.05,size[1])*np.random.normal(0,mnd_noise, size[1]) for theta in thetas])
                 #X = X + np.random.normal(0,1e-2,X.shape)
                 return torch.unsqueeze(torch.from_numpy(X).float(), dim=1).to(device)
 

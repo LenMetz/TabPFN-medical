@@ -251,7 +251,7 @@ class CatBoostGrid(BaseEstimator, ClassifierMixin):
         
         param_grid = {
             'depth':[6,9],
-            'iterations':[100,200],
+            'iterations':[100],
             'learning_rate':[0.01,0.1,0.3], 
             'l2_leaf_reg':[1,10]
         }
