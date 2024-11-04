@@ -15,8 +15,11 @@ import torch
 import catboost as cb
 import optuna
 from math import e
-from autogluon.tabular import TabularDataset, TabularPredictor
+#from autogluon.tabular import TabularDataset, TabularPredictor
 import pandas as pd
+from data_prep_utils import *
+from sklearn.linear_model import LogisticRegression
+
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -66,6 +69,22 @@ class TabForestPFNClassifier(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X):
         logits = self.trainer.predict(self.X_, self.y_, X)
         return np.exp(logits) / np.exp(logits).sum(axis=1)[:, None]
+
+class LogisticRegressionClassifier(BaseEstimator, ClassifierMixin):
+    def __init__(self):
+        super().__init__()
+        self.model = LogisticRegression()
+
+    def fit(self, X, y):
+        X = normalize(X)
+        self.model.fit(X,y)
+
+    def predict(self, X):
+        return self.model.predict(normalize(X))
+    
+    def predict_proba(self, X):
+        return self.model.predict_proba(normalize(X))
+        
 
 class MajorityClass(BaseEstimator, ClassifierMixin):
     def __init__(self, maj_class=0):
