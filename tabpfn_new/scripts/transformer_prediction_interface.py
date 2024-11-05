@@ -580,7 +580,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
 
 class MedPFNClassifier(TabPFNClassifier):
     def __init__(self, model_par=None, c=None, device='cpu', base_path=None, filename=None,
-                 N_ensemble_configurations=3, ft_epochs=0, ft_lr=1e-5, max_s=1024, max_q=256, no_preprocess_mode=False, multiclass_decoder='permutation',
+                 N_ensemble_configurations=3, ft_epochs=0, ft_lr=1e-5, max_s=2048, max_q=256, no_preprocess_mode=False, multiclass_decoder='permutation',
                  feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32,
                  subsample_features=False, clr=False):
 
@@ -639,13 +639,16 @@ class MedPFNClassifier(TabPFNClassifier):
         self.pred_model.model[2].train()
         optimizer = torch.optim.AdamW(self.pred_model.model[2].parameters(), lr=self.ft_lr)
         criterion = torch.nn.CrossEntropyLoss(weight=weights)
-        total_len = min(X.shape[0], max_sup+max_que)
-        pos = min(int(X.shape[0]*0.8), max_sup)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=int(self.ft_epochs/4), gamma=0.5)
+        train_size = min(int(0.8*X.shape[0]),max_sup)
+        test_size = min(int(0.2*X.shape[0]),max_que)
+        pos = train_size
         for e in range(self.ft_epochs):
-            p = np.random.default_rng().permutation(y.shape[0])
-            X_new, y_new = torch.tensor(X[p]).float()[:total_len], torch.tensor(y[p]).float()[:total_len]
-            X_new, y_new = balance_split(X_new, y_new, pos)
-            X_new = normalize_data(X_new)
+            #p = np.random.default_rng().permutation(y.shape[0])
+            #X_new, y_new = torch.tensor(X[p]).float()[:total_len], torch.tensor(y[p]).float()[:total_len]
+            X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=train_size, test_size=test_size, stratify=y)
+            X_new = normalize_data(torch.tensor(np.concatenate((X_train,X_test),axis=0))).float()
+            y_new = torch.tensor(np.concatenate((y_train,y_test),axis=0)).float()
             src = (0,X_new,y_new)
             output = self.pred_model.model[2](src, single_eval_pos=pos)
             targets = y_new[pos:]
@@ -653,6 +656,7 @@ class MedPFNClassifier(TabPFNClassifier):
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
+            scheduler.step()
         self.pred_model.model[2].eval()
         
     def fit(self, X, y, overwrite_warning=False):

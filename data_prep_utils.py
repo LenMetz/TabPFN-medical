@@ -66,6 +66,7 @@ def clr(data):
     data = np.log(data)-np.mean(np.log(data), axis=1, keepdims=True)
     return data
 
+    
 def normalize(data):
     return (data-np.mean(data,axis=0))/(np.std(data,axis=0)+1e-15)
 
