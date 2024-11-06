@@ -234,14 +234,13 @@ class XGBoostGrid(BaseEstimator, ClassifierMixin):
         
         param_grid = {
             'learning_rate': [0.01, 0.1, 1.0],
-            'max_depth': [5, 7, 9],
+            'max_depth': [7, 9],
             'subsample': [0.5, 0.7],
-            'colsample_bytree': [0.5, 0.7],
             'n_estimators': [5,25,50],
             'gamma': [0.1,0.5,0.9]
             
         }
-        grid_search = GridSearchCV(estimator = self.model, param_grid=param_grid, cv=5, scoring="roc_auc")
+        grid_search = GridSearchCV(estimator = self.model, param_grid=param_grid, cv=3, scoring="roc_auc")
         grid_search.fit(X, y)
         best_params = grid_search.best_params_
         self.model =  XGBClassifier(**best_params,)
@@ -274,7 +273,7 @@ class CatBoostGrid(BaseEstimator, ClassifierMixin):
             'learning_rate':[0.01,0.1,0.3], 
             'l2_leaf_reg':[1,10]
         }
-        grid_search = GridSearchCV(estimator = self.model, param_grid=param_grid, cv=5, scoring="roc_auc")
+        grid_search = GridSearchCV(estimator = self.model, param_grid=param_grid, cv=3, scoring="roc_auc")
         grid_search.fit(X, y)
         best_params = grid_search.best_params_
         self.model =  cb.CatBoostClassifier(**best_params, silent=True)
