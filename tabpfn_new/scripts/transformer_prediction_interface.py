@@ -112,7 +112,7 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, model_par=None, c=None, device='cpu', base_path=pathlib.Path(__file__).parent.parent.resolve(), model_string='',
                  N_ensemble_configurations=3, no_preprocess_mode=False, multiclass_decoder='permutation',
                  feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32,
-                 subsample_features=False, norm=True, clr=False):
+                 subsample_features=False, norm=True, preprocess="mix"):
         """
         Initializes the classifier and loads the model. 
         Depending on the arguments, the model is either loaded from memory, from a file, or downloaded from the 
@@ -163,7 +163,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         else:
             model = (0, 0, model_par)
             config = c
-        
+
+        self.preprocess = preprocess
         self.device = device
         self.model_par = model_par
         self.model = model
@@ -188,7 +189,6 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
         self.seed = seed
         self.no_grad = no_grad
         self.norm = norm
-        self.clr = clr
         self.subsample_features = subsample_features
 
         assert self.no_preprocess_mode if not self.no_grad else True, \
@@ -285,9 +285,8 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
                                          device=self.device,
                                          style=self.style,
                                          inference_mode=True,
-                                         preprocess_transform='none' if self.no_preprocess_mode else 'mix',
+                                         preprocess_transform= self.preprocess,
                                          normalize=self.norm,
-                                         clr=self.clr,
                                          normalize_with_test=normalize_with_test,
                                          N_ensemble_configurations=self.N_ensemble_configurations,
                                          softmax_temperature=self.temperature,
@@ -315,6 +314,24 @@ class TabPFNClassifier(BaseEstimator, ClassifierMixin):
             return y, p.max(axis=-1)
         return y
 
+class CLR:
+    def fit(X):
+        pass
+    def transform(X):
+        X = X+1e-10
+        X = np.log(X)-np.mean(np.log(X), axis=1, keepdims=True)
+        return X
+
+class ALR:
+    def fit(X):
+        pass
+    def transform(X):
+        counts = np.count_nonzero(X, axis=0)
+        indices = np.argsort(counts)[::-1]
+        X = X[:,indices[0]]
+        return np.log(X/np.expand_dims(X+1e-10,1)+1e-10)
+
+
 import time
 def transformer_predict(model, eval_xs, eval_ys, eval_position,
                         device='cpu',
@@ -324,7 +341,6 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                         num_classes=2,
                         extend_features=True,
                         normalize=True,
-                        clr=False,
                         normalize_with_test=False,
                         normalize_to_ranking=False,
                         softmax_temperature=0.0,
@@ -408,13 +424,12 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                 pt = QuantileTransformer(output_distribution='normal')
             elif preprocess_transform == 'robust' or preprocess_transform == 'robust_all':
                 pt = RobustScaler(unit_variance=True)
+            elif preprocess_transform == 'clr':
+                pt = CLR()
+            elif preprocess_transform == 'alr':
+                pt = ALR()
 
         # eval_xs, eval_ys = normalize_data(eval_xs), normalize_data(eval_ys)
-        if clr:
-            eval_xs = eval_xs+1e-10
-            eval_xs = torch.log(eval_xs)-torch.mean(torch.log(eval_xs), dim=1, keepdim=True)
-        if normalize:
-            eval_xs = normalize_data(eval_xs, normalize_positions=-1 if normalize_with_test else eval_position)
 
         # Removing empty features
         eval_xs = eval_xs[:, 0, :]
@@ -435,6 +450,8 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                 except:
                     pass
             eval_xs = torch.tensor(eval_xs).float()
+        if normalize:
+            eval_xs = normalize_data(eval_xs, normalize_positions=-1 if normalize_with_test else eval_position)
         warnings.simplefilter('default')
 
         eval_xs = eval_xs.unsqueeze(1)
@@ -479,7 +496,7 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
         if i == 1:
             return 'none'
 
-    preprocess_transform_configurations = ['none', 'power_all'] if preprocess_transform == 'mix' else [preprocess_transform]
+    preprocess_transform_configurations = ['none', 'power_all'] if preprocess_transform == 'mix' else ["none", "clr", "alr"] if preprocess_transform=='lr' else [preprocess_transform]
 
     if seed is not None:
         torch.manual_seed(seed)
@@ -580,22 +597,21 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
 
 class MedPFNClassifier(TabPFNClassifier):
     def __init__(self, model_par=None, c=None, device='cpu', base_path=None, filename=None,
-                 N_ensemble_configurations=3, ft_epochs=0, ft_lr=1e-5, max_s=2048, max_q=256, no_preprocess_mode=False, multiclass_decoder='permutation',
+                 N_ensemble_configurations=3, ft_epochs=0, ft_lr=1e-5, max_s=2048, max_q=256, preprocess_mode='mix', multiclass_decoder='permutation',
                  feature_shift_decoder=True, only_inference=True, seed=0, no_grad=True, batch_size_inference=32,
-                 subsample_features=False, clr=False):
+                 subsample_features=False):
 
-        model, config = load_model(base_path, filename, device="cpu", eval_positions=None, verbose=False)
+        model, config = load_model(base_path, filename, device=device, eval_positions=None, verbose=False)
         self.device = device
         self.model_par = model_par
         self.model = model
-        self.pred_model = TabPFNClassifier(model[2], config, device="cpu", N_ensemble_configurations=N_ensemble_configurations, 
-                                           multiclass_decoder=multiclass_decoder, no_preprocess_mode=no_preprocess_mode, clr=clr)
+        self.pred_model = TabPFNClassifier(model[2], config, device=device, N_ensemble_configurations=N_ensemble_configurations, 
+                                           multiclass_decoder=multiclass_decoder, preprocess=preprocess_mode)
         self.c = c
         self.ft_epochs = ft_epochs
         self.ft_lr = ft_lr
         self.max_s = max_s
         self.max_q = max_q
-        self.clr = clr
         self.config = config
         self.style = None
         self.temperature = None
@@ -610,7 +626,7 @@ class MedPFNClassifier(TabPFNClassifier):
         self.max_num_classes = self.config['max_num_classes']
         self.differentiable_hps_as_style = self.config['differentiable_hps_as_style']
 
-        self.no_preprocess_mode = no_preprocess_mode
+        self.preprocess_mode = preprocess_mode
         self.feature_shift_decoder = feature_shift_decoder
         self.multiclass_decoder = multiclass_decoder
         self.only_inference = only_inference
@@ -635,7 +651,7 @@ class MedPFNClassifier(TabPFNClassifier):
     
     def finetune(self,X,y, max_sup=1024, max_que=128):
         counts = torch.unique(torch.tensor(y), return_counts=True)[1]
-        weights = (counts/torch.sum(counts)).flip(dims=(0,))
+        weights = (counts/torch.sum(counts)).flip(dims=(0,)).to(self.device)
         self.pred_model.model[2].train()
         optimizer = torch.optim.AdamW(self.pred_model.model[2].parameters(), lr=self.ft_lr)
         criterion = torch.nn.CrossEntropyLoss(weight=weights)
@@ -647,8 +663,8 @@ class MedPFNClassifier(TabPFNClassifier):
             #p = np.random.default_rng().permutation(y.shape[0])
             #X_new, y_new = torch.tensor(X[p]).float()[:total_len], torch.tensor(y[p]).float()[:total_len]
             X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=train_size, test_size=test_size, stratify=y)
-            X_new = normalize_data(torch.tensor(np.concatenate((X_train,X_test),axis=0))).float()
-            y_new = torch.tensor(np.concatenate((y_train,y_test),axis=0)).float()
+            X_new = normalize_data(torch.tensor(np.concatenate((X_train,X_test),axis=0)).to(self.device)).float()
+            y_new = torch.tensor(np.concatenate((y_train,y_test),axis=0)).to(self.device).float()
             src = (0,X_new,y_new)
             output = self.pred_model.model[2](src, single_eval_pos=pos)
             targets = y_new[pos:]

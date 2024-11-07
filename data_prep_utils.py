@@ -45,6 +45,10 @@ def undersample(X, y):
     y_new = np.concatenate((np.full(n_sample_min, min_class),np.full(n_sample_min, max_class)))
     return X_new, y_new
 
+def remove_liers_max(data, labels, clip=0.5):
+    ind = np.max(data, axis=1)<clip
+    return data[ind], labels[ind]
+    
 # fetches microbiome data, reduces to healthy/CRC binary classification and converts to numpy
 def get_microbiome(path):
     df = pd.read_csv(path)
