@@ -663,6 +663,8 @@ class MedPFNClassifier(TabPFNClassifier):
             #p = np.random.default_rng().permutation(y.shape[0])
             #X_new, y_new = torch.tensor(X[p]).float()[:total_len], torch.tensor(y[p]).float()[:total_len]
             X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=train_size, test_size=test_size, stratify=y)
+            X_train = np.concatenate((X_train,np.zeros((X_train.shape[0],100-X_train.shape[1]))),axis=1)
+            X_test = np.concatenate((X_test,np.zeros((X_test.shape[0],100-X_test.shape[1]))),axis=1)
             X_new = normalize_data(torch.tensor(np.concatenate((X_train,X_test),axis=0)).to(self.device)).float()
             y_new = torch.tensor(np.concatenate((y_train,y_test),axis=0)).to(self.device).float()
             src = (0,X_new,y_new)
