@@ -1,0 +1,4 @@
+,Unnamed: 0,accuracy mean,accuracy std,precision mean,precision std,recall mean,recall std,roc_auc mean,roc_auc std,f1 mean,f1 std,runtime mean,runtime std
+0,MedPFNClassifier,0.949,0.01,0.55,0.308,0.222,0.13,0.829,0.083,0.297,0.159,0.037,0.005
+1,MedPFNClassifier,0.958,0.011,0.748,0.297,0.293,0.164,0.862,0.08,0.402,0.194,0.753,0.09
+2,MedPFNClassifier,0.957,0.011,0.742,0.292,0.31,0.161,0.861,0.08,0.416,0.182,2.901,0.286
