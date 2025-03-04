@@ -430,7 +430,8 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                 pt = ALR()
 
         # eval_xs, eval_ys = normalize_data(eval_xs), normalize_data(eval_ys)
-
+        if normalize:
+            eval_xs = normalize_data(eval_xs, normalize_positions=-1 if normalize_with_test else eval_position)
         # Removing empty features
         eval_xs = eval_xs[:, 0, :]
         sel = [len(torch.unique(eval_xs[0:eval_ys.shape[0], col])) > 1 for col in range(eval_xs.shape[1])]
@@ -450,8 +451,6 @@ def transformer_predict(model, eval_xs, eval_ys, eval_position,
                 except:
                     pass
             eval_xs = torch.tensor(eval_xs).float()
-        if normalize:
-            eval_xs = normalize_data(eval_xs, normalize_positions=-1 if normalize_with_test else eval_position)
         warnings.simplefilter('default')
 
         eval_xs = eval_xs.unsqueeze(1)
@@ -674,7 +673,7 @@ class MedPFNClassifier(TabPFNClassifier):
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
-            scheduler.step()
+            #scheduler.step()
         self.pred_model.model[2].eval()
         
     def fit(self, X, y, overwrite_warning=False):

@@ -234,7 +234,7 @@ class XGBoostGrid(BaseEstimator, ClassifierMixin):
         
         param_grid = {
             'learning_rate': [0.01, 0.1, 1.0],
-            'max_depth': [7, 9],
+            'max_depth': [5, 7, 9],
             'subsample': [0.5, 0.7],
             'n_estimators': [5,25,50],
             'gamma': [0.1,0.5,0.9]
@@ -269,7 +269,7 @@ class CatBoostGrid(BaseEstimator, ClassifierMixin):
         
         param_grid = {
             'depth':[6,9],
-            'iterations':[100],
+            'iterations':[100, 200],
             'learning_rate':[0.01,0.1,0.3], 
             'l2_leaf_reg':[1,10]
         }
