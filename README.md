@@ -14,4 +14,4 @@ This thesis is based on [Prior-Data Fitted Networks](https://arxiv.org/abs/2112.
 Full thesis can be found at [here](https://github.com/LenMetz/TabPFN-medical/blob/main/main.pdf)
 
 
-Thesis was conducted in cooperation with the M3 research center in Tübingen. 
+Thesis was conducted in cooperation with the M3 research center in Tübingen. **Final grade: 1.3**
